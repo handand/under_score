@@ -2,31 +2,32 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Manual WebRTC Demo (No Trickle ICE)</title>
+  <title>Manual WebRTC DataChannel Demo</title>
   <style>
     body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; }
-    textarea { width: 100%; height: 120px; margin-bottom: 0.5rem; }
+    textarea { width: 100%; height: 120px; }
     button { margin: 0.5rem 0; padding: 0.5rem 1rem; }
     #log { border: 1px solid #ccc; padding: 0.5rem; height: 150px; overflow-y: auto; margin-top: 1rem; }
   </style>
 </head>
 <body>
-  <h1>Manual WebRTC Demo</h1>
-  <p><strong>Step 1:</strong> Host clicks "Create Offer", copies the blob and sends to Joiner.<br>
-     <strong>Step 2:</strong> Joiner pastes Offer, clicks "Create Answer", copies blob and sends back.<br>
-     <strong>Step 3:</strong> Host pastes Answer, clicks "Set Answer".<br>
-     Once connected, use the chat below.</p>
+  <h1>Manual WebRTC DataChannel Demo</h1>
 
-  <h2>Host</h2>
+  <h2>Step 1: Offer (Host)</h2>
   <button id="createOffer">Create Offer</button>
   <textarea id="offerOut" placeholder="Copy this and send to other peer"></textarea>
   <textarea id="answerIn" placeholder="Paste Answer here"></textarea>
   <button id="setAnswer">Set Answer</button>
 
-  <h2>Joiner</h2>
+  <h2>Step 2: Answer (Joiner)</h2>
   <textarea id="offerIn" placeholder="Paste Offer here"></textarea>
   <button id="createAnswer">Create Answer</button>
   <textarea id="answerOut" placeholder="Copy this and send to host"></textarea>
+
+  <h2>Exchange ICE Candidates</h2>
+  <textarea id="localCandidates" placeholder="Your ICE candidates (copy/paste to other peer)"></textarea>
+  <textarea id="remoteCandidates" placeholder="Paste ICE candidates from other peer here"></textarea>
+  <button id="addCandidates">Add Remote Candidates</button>
 
   <h2>Chat</h2>
   <input id="msg" type="text" placeholder="Type a message" />
@@ -45,51 +46,46 @@
       document.getElementById("log").appendChild(div);
     }
 
-    // Wait until ICE is fully gathered
-    function waitForIceGatheringComplete(pc) {
-      return new Promise(resolve => {
-        if (pc.iceGatheringState === "complete") {
-          resolve();
-        } else {
-          pc.addEventListener("icegatheringstatechange", () => {
-            if (pc.iceGatheringState === "complete") {
-              resolve();
-            }
-          });
-        }
-      });
-    }
-
     // Host: create offer
     document.getElementById("createOffer").onclick = async () => {
       pc = new RTCPeerConnection(config);
 
       channel = pc.createDataChannel("chat");
-      channel.onopen = () => log("✅ Data channel open!");
+      channel.onopen = () => log("Data channel open!");
       channel.onmessage = (e) => log("Peer: " + e.data);
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          document.getElementById("localCandidates").value += JSON.stringify(event.candidate) + "\n";
+        }
+      };
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-
-      await waitForIceGatheringComplete(pc);
-      document.getElementById("offerOut").value = JSON.stringify(pc.localDescription);
+      document.getElementById("offerOut").value = JSON.stringify(offer);
     };
 
     // Host: set answer
     document.getElementById("setAnswer").onclick = async () => {
       const answer = JSON.parse(document.getElementById("answerIn").value);
       await pc.setRemoteDescription(answer);
-      log("✅ Answer set!");
+      log("Answer set!");
     };
 
-    // Joiner: create answer
+    // Joiner: create answer from pasted offer
     document.getElementById("createAnswer").onclick = async () => {
       pc = new RTCPeerConnection(config);
 
       pc.ondatachannel = (event) => {
         channel = event.channel;
-        channel.onopen = () => log("✅ Data channel open!");
+        channel.onopen = () => log("Data channel open!");
         channel.onmessage = (e) => log("Peer: " + e.data);
+      };
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          document.getElementById("localCandidates").value += JSON.stringify(event.candidate) + "\n";
+        }
       };
 
       const offer = JSON.parse(document.getElementById("offerIn").value);
@@ -97,9 +93,22 @@
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+      document.getElementById("answerOut").value = JSON.stringify(answer);
+    };
 
-      await waitForIceGatheringComplete(pc);
-      document.getElementById("answerOut").value = JSON.stringify(pc.localDescription);
+    // Add remote ICE candidates
+    document.getElementById("addCandidates").onclick = async () => {
+      const candidates = document.getElementById("remoteCandidates").value.trim().split("\n");
+      for (let c of candidates) {
+        if (c) {
+          try {
+            await pc.addIceCandidate(JSON.parse(c));
+            log("Added remote candidate");
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      }
     };
 
     // Send chat message
