@@ -37,7 +37,11 @@
     let pc;
     let channel;
 
-    const config = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+    const config = {
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceCandidatePoolSize: 10, // Re-adding for faster candidate gathering
+      iceTransportPolicy: "all" // Explicitly gather all candidates
+    };
 
     function log(msg) {
       const div = document.createElement("div");
@@ -66,6 +70,36 @@
       });
     }
 
+    async function logSelectedCandidatePair(pc) {
+      try {
+        const stats = await pc.getStats();
+        let pair;
+        log("Gathered stats:");
+        stats.forEach(report => {
+          log(`  Report ID: ${report.id}, Type: ${report.type}`);
+          if (report.type === "transport" && report.selectedCandidatePairId) {
+            log(`    Transport selectedCandidatePairId: ${report.selectedCandidatePairId}`);
+            const selected = stats.get(report.selectedCandidatePairId);
+            if (selected) {
+              pair = selected;
+              log(`    Found selected pair report: ${JSON.stringify(pair)}`);
+            } else {
+              log(`    Selected candidate pair report not found for ID: ${report.selectedCandidatePairId}`);
+            }
+          }
+        });
+        if (pair) {
+          const local = stats.get(pair.localCandidateId);
+          const remote = stats.get(pair.remoteCandidateId);
+          log(`Selected pair → local:${local?.candidateType}(${local?.protocol}) <-> remote:${remote?.candidateType}(${remote?.protocol})`);
+        } else {
+          log("No selected candidate pair found in stats.");
+        }
+      } catch (e) {
+        logError("Failed to log selected candidate pair", e); // Added error logging for debugging
+      }
+    }
+
     // Host: create offer
     document.getElementById("createOffer").onclick = async () => {
       try {
@@ -75,11 +109,43 @@
         // Add connection state monitoring
         pc.onconnectionstatechange = () => {
           log("Connection state: " + pc.connectionState);
+          if (pc.connectionState === "connected") {
+            logSelectedCandidatePair(pc);
+          }
+          if (pc.connectionState === "failed") {
+            logError("Connection failed. Likely NAT/firewall issue. Consider using a TURN server or same network.");
+            logSelectedCandidatePair(pc);
+          }
         };
 
         pc.oniceconnectionstatechange = () => {
           log("ICE connection state: " + pc.iceConnectionState);
+          if (pc.iceConnectionState === "connected") {
+            logSelectedCandidatePair(pc);
+          }
+          if (pc.iceConnectionState === "failed") {
+            logError("ICE failed. If peers are on different networks, add a TURN server.");
+          }
         };
+
+        pc.onicegatheringstatechange = () => {
+          log("ICE gathering state: " + pc.iceGatheringState);
+        };
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            const c = event.candidate;
+            // Log a short preview for readability
+            log("ICE candidate: " + (c.type || "?") + "/" + (c.protocol || "?") +
+                " → " + (c.candidate ? c.candidate.substring(0, 40) + "..." : ""));
+          } else {
+            log("ICE candidate: null (gathering complete)");
+          }
+        };
+
+        pc.addEventListener("icecandidateerror", (e) => {
+          logError(`ICE candidate error on ${e.address || "n/a"}:${e.port || ""} (url:${e.url || ""})`);
+        });
 
         channel = pc.createDataChannel("chat");
         channel.onopen = () => log("✅ Data channel open!");
@@ -89,6 +155,7 @@
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         log("📤 Offer created, waiting for ICE gathering...");
+        log("SDP after setLocalDescription (pre-gathering):\n" + pc.localDescription.sdp);
 
         await waitForIceGatheringComplete(pc);
         document.getElementById("offerOut").value = JSON.stringify(pc.localDescription);
@@ -106,7 +173,7 @@
           logError("Please paste the answer from the other peer");
           return;
         }
-        
+
         log("🔄 Setting answer...");
         const answer = JSON.parse(answerText);
         await pc.setRemoteDescription(answer);
@@ -131,11 +198,42 @@
         // Add connection state monitoring
         pc.onconnectionstatechange = () => {
           log("Connection state: " + pc.connectionState);
+          if (pc.connectionState === "connected") {
+            logSelectedCandidatePair(pc);
+          }
+          if (pc.connectionState === "failed") {
+            logError("Connection failed. Likely NAT/firewall issue. Consider using a TURN server or same network.");
+            logSelectedCandidatePair(pc);
+          }
         };
 
         pc.oniceconnectionstatechange = () => {
           log("ICE connection state: " + pc.iceConnectionState);
+          if (pc.iceConnectionState === "connected") {
+            logSelectedCandidatePair(pc);
+          }
+          if (pc.iceConnectionState === "failed") {
+            logError("ICE failed. If peers are on different networks, add a TURN server.");
+          }
         };
+
+        pc.onicegatheringstatechange = () => {
+          log("ICE gathering state: " + pc.iceGatheringState);
+        };
+
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            const c = event.candidate;
+            log("ICE candidate: " + (c.type || "?") + "/" + (c.protocol || "?") +
+                " → " + (c.candidate ? c.candidate.substring(0, 40) + "..." : ""));
+          } else {
+            log("ICE candidate: null (gathering complete)");
+          }
+        };
+
+        pc.addEventListener("icecandidateerror", (e) => {
+          logError(`ICE candidate error on ${e.address || "n/a"}:${e.port || ""} (url:${e.url || ""})`);
+        });
 
         pc.ondatachannel = (event) => {
           channel = event.channel;
@@ -151,6 +249,7 @@
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         log("📤 Answer created, waiting for ICE gathering...");
+        log("SDP after setLocalDescription (pre-gathering):\n" + pc.localDescription.sdp);
 
         await waitForIceGatheringComplete(pc);
         document.getElementById("answerOut").value = JSON.stringify(pc.localDescription);
@@ -164,9 +263,9 @@
     function sendMessage() {
       const msgInput = document.getElementById("msg");
       const msg = msgInput.value.trim();
-      
+
       if (!msg) return;
-      
+
       if (channel && channel.readyState === "open") {
         try {
           channel.send(msg);
