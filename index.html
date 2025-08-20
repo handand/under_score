@@ -212,6 +212,11 @@
             createAnswerBtn.addEventListener('click', createAnswer);
             addAnswerBtn.addEventListener('click', addAnswer);
             sendBtn.addEventListener('click', sendMessage);
+            messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
 
             // --- Core WebRTC Functions ---
 
@@ -259,7 +264,8 @@
                 
                 try {
                     const offer = JSON.parse(remoteSdpTextarea.value);
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                    // --- FIX: Pass the parsed object directly, without new RTCSessionDescription() ---
+                    await peerConnection.setRemoteDescription(offer);
                     
                     const answer = await peerConnection.createAnswer();
                     await peerConnection.setLocalDescription(answer);
@@ -281,11 +287,12 @@
                 if (!remoteAnswerSdpTextarea.value) {
                     return alert('Please paste the answer from Peer 2 first.');
                 }
-                updateStatus('Connecting...');
+                updateStatus('Adding answer and connecting...');
 
                 try {
                     const answer = JSON.parse(remoteAnswerSdpTextarea.value);
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                    // --- FIX: Pass the parsed object directly, without new RTCSessionDescription() ---
+                    await peerConnection.setRemoteDescription(answer);
                     remoteAnswerSdpTextarea.disabled = true;
                     addAnswerBtn.disabled = true;
                 } catch (e) {
@@ -304,7 +311,7 @@
                     // When the browser has finished gathering candidates, event.candidate will be null.
                     // This is our signal to present the complete SDP to the user.
                     if (!event.candidate) {
-                        updateStatus('ICE Gathering Complete. Copy the data below.');
+                        updateStatus('ICE Gathering Complete. You can now copy the data below.');
                         // For the offerer, we populate the offer textarea
                         if(pc.localDescription.type === 'offer') {
                             offerSdpTextarea.value = JSON.stringify(pc.localDescription);
@@ -332,7 +339,7 @@
              */
             function setupDataChannelEvents(dc) {
                 dc.onopen = () => {
-                    updateStatus('Data Channel is open!');
+                    updateStatus('Data Channel is open! You can now chat.');
                     messageInput.disabled = false;
                     sendBtn.disabled = false;
                     messageInput.focus();
