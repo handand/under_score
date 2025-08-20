@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRTC Manual Chat (Fixed)</title>
+    <title>WebRTC Manual Chat (Working)</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; background-color: #f4f4f9; color: #333; max-width: 900px; margin: 20px auto; padding: 0 20px; }
         h1, h2 { color: #4a4a4a; border-bottom: 2px solid #e1e1e8; padding-bottom: 10px; }
         .container { display: flex; gap: 20px; flex-wrap: wrap; }
         .column { flex: 1; min-width: 300px; padding: 20px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        textarea { width: 100%; height: 120px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; margin-top: 10px; padding: 8px; font-family: 'Courier New', Courier, monospace; font-size: 0.9em; resize: vertical; }
+        textarea { width: 100%; height: 150px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; margin-top: 10px; padding: 8px; font-family: 'Courier New', Courier, monospace; font-size: 0.9em; resize: vertical; }
         button { display: block; width: 100%; padding: 12px; margin-top: 10px; border: none; border-radius: 4px; background-color: #007bff; color: white; font-size: 16px; cursor: pointer; transition: background-color 0.2s; }
         button:hover:not(:disabled) { background-color: #0056b3; }
         button:disabled { background-color: #c0c0c0; cursor: not-allowed; }
@@ -27,9 +27,9 @@
 </head>
 <body>
 
-    <h1>WebRTC Manual Chat (Fixed)</h1>
+    <h1>WebRTC Manual Chat (Working)</h1>
     <div class="instructions">
-        <p><strong>Instructions:</strong> Exchange the generated "Offer" and "Answer" packets between the two windows.</p>
+        <p><strong>Instructions:</strong> Follow the steps carefully. After clicking a button, wait for the text area below it to be populated before copying.</p>
     </div>
 
     <div id="status" class="status-disconnected">Status: Disconnected</div>
@@ -37,21 +37,20 @@
     <div class="container">
         <div class="column">
             <h2>Caller</h2>
-            <button id="create-offer-btn">1. Create Offer Packet</button>
-            <textarea id="offer-packet-textarea" placeholder="Offer Packet will appear here..." readonly></textarea>
+            <button id="create-offer-btn">1. Create Offer</button>
+            <textarea id="offer-sdp-textarea" placeholder="Offer SDP will appear here..." readonly></textarea>
             
-            <label for="paste-answer-packet-textarea">Paste Answer Packet Here:</label>
-            <textarea id="paste-answer-packet-textarea" placeholder="Paste the answer packet from the callee here..."></textarea>
-            <button id="connect-btn">3. Connect</button>
+            <label for="paste-answer-sdp-textarea">Paste Answer SDP Here:</label>
+            <textarea id="paste-answer-sdp-textarea" placeholder="Paste the answer SDP from the callee here..."></textarea>
+            <button id="set-answer-btn">3. Set Answer & Connect</button>
         </div>
 
         <div class="column">
             <h2>Callee</h2>
-            <label for="paste-offer-packet-textarea">Paste Offer Packet Here:</label>
-            <textarea id="paste-offer-packet-textarea" placeholder="Paste the offer packet from the caller here..."></textarea>
-            <button id="create-answer-btn">2. Create Answer Packet</button>
-
-            <textarea id="answer-packet-textarea" placeholder="Answer Packet will appear here..." readonly></textarea>
+            <label for="paste-offer-sdp-textarea">Paste Offer SDP Here:</label>
+            <textarea id="paste-offer-sdp-textarea" placeholder="Paste the offer SDP from the caller here..."></textarea>
+            <button id="create-answer-btn">2. Create Answer</button>
+            <textarea id="answer-sdp-textarea" placeholder="Answer SDP will appear here..." readonly></textarea>
         </div>
     </div>
     
@@ -70,14 +69,14 @@
         // --- DOM Elements ---
         const createOfferBtn = document.getElementById('create-offer-btn');
         const createAnswerBtn = document.getElementById('create-answer-btn');
-        const connectBtn = document.getElementById('connect-btn');
+        const setAnswerBtn = document.getElementById('set-answer-btn');
         const resetBtn = document.getElementById('reset-btn');
         const sendBtn = document.getElementById('send-btn');
         
-        const offerPacketTextarea = document.getElementById('offer-packet-textarea');
-        const answerPacketTextarea = document.getElementById('answer-packet-textarea');
-        const pasteOfferPacketTextarea = document.getElementById('paste-offer-packet-textarea');
-        const pasteAnswerPacketTextarea = document.getElementById('paste-answer-packet-textarea');
+        const offerSdpTextarea = document.getElementById('offer-sdp-textarea');
+        const answerSdpTextarea = document.getElementById('answer-sdp-textarea');
+        const pasteOfferSdpTextarea = document.getElementById('paste-offer-sdp-textarea');
+        const pasteAnswerSdpTextarea = document.getElementById('paste-answer-sdp-textarea');
         
         const statusDiv = document.getElementById('status');
         const chatContainer = document.getElementById('chat-container');
@@ -94,37 +93,31 @@
         // --- Event Listeners ---
         createOfferBtn.addEventListener('click', createOffer);
         createAnswerBtn.addEventListener('click', createAnswer);
-        connectBtn.addEventListener('click', connectPeers);
+        setAnswerBtn.addEventListener('click', setAnswer);
         sendBtn.addEventListener('click', sendMessage);
         messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
         resetBtn.addEventListener('click', () => window.location.reload());
-
-        function updateStatus(text, className) {
-            statusDiv.textContent = `Status: ${text}`;
-            statusDiv.className = className;
-        }
-
-        function appendLog(message) {
-            chatLog.textContent += message + '\n';
-            chatLog.scrollTop = chatLog.scrollHeight;
-        }
         
+        // --- Core Logic ---
+
         function initializePeerConnection() {
             peerConnection = new RTCPeerConnection(configuration);
 
             peerConnection.onconnectionstatechange = () => {
-                console.log(`Connection State: ${peerConnection.connectionState}`);
-                updateStatus(peerConnection.connectionState, `status-${peerConnection.connectionState}`);
-                if (peerConnection.connectionState === 'connected') {
+                const state = peerConnection.connectionState;
+                console.log(`Connection State changed to: ${state}`);
+                statusDiv.textContent = `Status: ${state}`;
+                statusDiv.className = `status-${state}`;
+
+                if (state === 'connected') {
                     chatContainer.style.display = 'block';
-                } else if (['disconnected', 'closed', 'failed'].includes(peerConnection.connectionState)) {
+                } else if (['disconnected', 'closed', 'failed'].includes(state)) {
                     chatContainer.style.display = 'none';
                 }
             };
 
-            // This handler is for the callee to receive the data channel from the caller
             peerConnection.ondatachannel = (event) => {
                 console.log("ondatachannel event received.");
                 dataChannel = event.channel;
@@ -139,96 +132,71 @@
                 appendLog(`Friend: ${event.data}`);
             };
         }
+        
+        function waitForIceGathering() {
+            return new Promise(resolve => {
+                if (peerConnection.iceGatheringState === 'complete') {
+                    resolve();
+                } else {
+                    const checkState = () => {
+                        if (peerConnection.iceGatheringState === 'complete') {
+                            peerConnection.removeEventListener('icegatheringstatechange', checkState);
+                            resolve();
+                        }
+                    }
+                    peerConnection.addEventListener('icegatheringstatechange', checkState);
+                }
+            });
+        }
 
         async function createOffer() {
             initializePeerConnection();
-            const localCandidates = [];
-            
-            // Collect ICE candidates
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    console.log("Found ICE candidate:", event.candidate);
-                    localCandidates.push(event.candidate);
-                } else {
-                    // All candidates have been gathered
-                    console.log("ICE Gathering Complete.");
-                    const offerPacket = {
-                        sdp: peerConnection.localDescription,
-                        candidates: localCandidates
-                    };
-                    offerPacketTextarea.value = JSON.stringify(offerPacket, null, 2);
-                }
-            };
-
-            // The caller creates the data channel
             dataChannel = peerConnection.createDataChannel("chat");
             setupDataChannelEvents();
-
-            console.log("Creating offer...");
+            
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
-            updateStatus("Connecting...", "status-connecting");
+            
+            statusDiv.textContent = 'Status: Gathering ICE candidates...';
+            statusDiv.className = 'status-connecting';
+
+            await waitForIceGathering();
+
+            // The localDescription now contains all the ICE candidates.
+            offerSdpTextarea.value = JSON.stringify(peerConnection.localDescription);
+            statusDiv.textContent = 'Status: Offer created. Copy and send it.';
         }
 
         async function createAnswer() {
-            if (!pasteOfferPacketTextarea.value) return alert("Please paste the offer packet first!");
+            if (!pasteOfferSdpTextarea.value) return alert("Please paste the offer SDP first!");
             
             initializePeerConnection();
-            const localCandidates = [];
             
-            // Collect ICE candidates
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    console.log("Found ICE candidate:", event.candidate);
-                    localCandidates.push(event.candidate);
-                } else {
-                    console.log("ICE Gathering Complete.");
-                    const answerPacket = {
-                        sdp: peerConnection.localDescription,
-                        candidates: localCandidates
-                    };
-                    answerPacketTextarea.value = JSON.stringify(answerPacket, null, 2);
-                }
-            };
+            const offer = JSON.parse(pasteOfferSdpTextarea.value);
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
             
-            const offerPacket = JSON.parse(pasteOfferPacketTextarea.value);
-            
-            console.log("Setting remote description from offer...");
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(offerPacket.sdp));
-            
-            console.log("Adding remote ICE candidates...");
-            for (const candidate of offerPacket.candidates) {
-                try {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                } catch (e) {
-                    console.error("Error adding received ice candidate", e);
-                }
-            }
-
-            console.log("Creating answer...");
             const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
-            updateStatus("Connecting...", "status-connecting");
+
+            statusDiv.textContent = 'Status: Gathering ICE candidates...';
+            statusDiv.className = 'status-connecting';
+
+            await waitForIceGathering();
+
+            // The localDescription now contains all the ICE candidates.
+            answerSdpTextarea.value = JSON.stringify(peerConnection.localDescription);
+            statusDiv.textContent = 'Status: Answer created. Copy and send it.';
         }
 
-        async function connectPeers() {
-            if (!pasteAnswerPacketTextarea.value) return alert("Please paste the answer packet first!");
+        async function setAnswer() {
+            if (!pasteAnswerSdpTextarea.value) return alert("Please paste the answer SDP first!");
+            if (!peerConnection) return alert("Please create an offer first!");
 
-            const answerPacket = JSON.parse(pasteAnswerPacketTextarea.value);
-
-            console.log("Setting remote description from answer...");
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(answerPacket.sdp));
-
-            console.log("Adding remote ICE candidates...");
-            for (const candidate of answerPacket.candidates) {
-                try {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                } catch (e) {
-                    console.error("Error adding received ice candidate", e);
-                }
-            }
+            const answer = JSON.parse(pasteAnswerSdpTextarea.value);
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+            console.log("Answer set. Connection should be established shortly.");
         }
-        
+
         function sendMessage() {
             const message = messageInput.value;
             if (message && dataChannel && dataChannel.readyState === 'open') {
@@ -236,6 +204,11 @@
                 appendLog(`You: ${message}`);
                 messageInput.value = '';
             }
+        }
+        
+        function appendLog(message) {
+            chatLog.textContent += message + '\n';
+            chatLog.scrollTop = chatLog.scrollHeight;
         }
     </script>
 </body>
