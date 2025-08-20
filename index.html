@@ -1,311 +1,504 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simple WebRTC Manual Chat</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            line-height: 1.6;
-            background-color: #f4f4f9;
-            color: #333;
-            max-width: 900px;
-            margin: 20px auto;
-            padding: 0 20px;
-        }
-        h1, h2 {
-            color: #4a4a4a;
-            border-bottom: 2px solid #e1e1e8;
-            padding-bottom: 10px;
-        }
-        .container {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-        .column {
-            flex: 1;
-            padding: 20px;
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        textarea {
-            width: 100%;
-            height: 120px;
-            box-sizing: border-box;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            margin-top: 10px;
-            padding: 8px;
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 0.9em;
-            resize: vertical;
-        }
-        button {
-            display: block;
-            width: 100%;
-            padding: 12px;
-            margin-top: 10px;
-            border: none;
-            border-radius: 4px;
-            background-color: #007bff;
-            color: white;
-            font-size: 16px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
-        button:disabled {
-            background-color: #c0c0c0;
-            cursor: not-allowed;
-        }
-        #status {
-            text-align: center;
-            font-size: 1.2em;
-            font-weight: bold;
-            padding: 10px;
-            margin-bottom: 20px;
-            border-radius: 4px;
-        }
-        .status-disconnected { background-color: #f8d7da; color: #721c24; }
-        .status-connecting { background-color: #fff3cd; color: #856404; }
-        .status-connected { background-color: #d4edda; color: #155724; }
-        #chat-container {
-            display: none; /* Initially hidden */
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        #chat-log {
-            height: 200px;
-            border: 1px solid #ccc;
-            background-color: #fafafa;
-            padding: 10px;
-            overflow-y: auto;
-            border-radius: 4px;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-        #message-input {
-            width: calc(100% - 90px);
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            margin-top: 10px;
-        }
-        #send-btn {
-            width: 80px;
-            display: inline-block;
-            vertical-align: top;
-            margin-top: 10px;
-        }
-        .instructions {
-            background-color: #e2e3e5;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebRTC Chat — Manual Copy/Paste Signaling</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --muted: #94a3b8;
+      --text: #e5e7eb;
+      --accent: #22c55e;
+      --accent-2: #06b6d4;
+      --border: #1f2937;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1200px 800px at 100% -10%, #0b1220 10%, var(--bg) 60%);
+      color: var(--text);
+    }
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 16px 80px;
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 28px;
+      letter-spacing: 0.2px;
+    }
+    p.lead { color: var(--muted); margin-top: 0; }
+    .status {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(160px, 1fr));
+      gap: 10px 16px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      background: linear-gradient(180deg, #0f172a, #0d1627);
+      border-radius: 10px;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+    .status span.value { color: #f8fafc; font-variant-numeric: tabular-nums; }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    @media (min-width: 900px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+    .card {
+      background: linear-gradient(180deg, #0b1220, #0e1423);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .card h2, .card h3 { margin: 6px 0 10px; font-size: 18px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    textarea, input[type="text"] {
+      width: 100%;
+      color: var(--text);
+      background: #0a1020;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      outline: none;
+      resize: vertical;
+      min-height: 100px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+    }
+    textarea[readonly] { opacity: 0.9; }
+    button {
+      background: #0b1020;
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: border-color .15s ease, transform .02s ease;
+      user-select: none;
+    }
+    button:hover { border-color: #2a3a54; }
+    button:active { transform: translateY(1px); }
+    button.primary { border-color: #1f9a50; background: linear-gradient(180deg, #17331f, #0f2216); }
+    button.secondary { border-color: #0c5360; background: linear-gradient(180deg, #0b2830, #0b1c22); }
+    button.danger { border-color: #6b1212; background: linear-gradient(180deg, #2b0f13, #1a0a0c); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .mono { white-space: pre-wrap; word-break: break-word; background: #0a1020; border: 1px solid var(--border); border-radius: 10px; padding: 10px; min-height: 100px; }
+    .log { height: 220px; overflow: auto; background: #070c18; border: 1px solid var(--border); border-radius: 10px; padding: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px; }
+    .msg { margin: 0 0 8px; display: flex; gap: 8px; align-items: baseline; }
+    .msg .who { color: var(--muted); min-width: 70px; text-align: right; }
+    .msg .text { color: var(--text); }
+    details { margin: 12px 0 16px; }
+    summary { cursor: pointer; color: var(--muted); }
+    footer { margin-top: 18px; color: var(--muted); font-size: 13px; }
+  </style>
 </head>
 <body>
+  <div class="container">
+    <h1>WebRTC Chat (Manual Signaling)</h1>
+    <p class="lead">Two browsers, no server. Share Offer/Answer by copy/paste. Wait for ICE gathering to say "complete" before copying.</p>
 
-    <h1>Simple WebRTC Manual Chat</h1>
-    <div class="instructions">
-        <p><strong>Instructions:</strong></p>
-        <ol>
-            <li><strong>User 1 (Caller):</strong> Click "Create Offer", copy the generated text, and send it to User 2.</li>
-            <li><strong>User 2 (Callee):</strong> Paste the offer into the "Paste Offer" box, click "Create Answer", copy the generated text, and send it back to User 1.</li>
-            <li><strong>User 1 (Caller):</strong> Paste the answer into the "Paste Answer" box and click "Set Answer & Connect".</li>
-        </ol>
+    <div class="status">
+      <div>Role: <span id="role" class="value">-</span></div>
+      <div>Signaling: <span id="signalingState" class="value">-</span></div>
+      <div>ICE gathering: <span id="iceGatheringState" class="value">-</span></div>
+      <div>ICE connection: <span id="iceConnectionState" class="value">-</span></div>
+      <div>Peer connection: <span id="connectionState" class="value">-</span></div>
     </div>
 
-    <div id="status" class="status-disconnected">Status: Disconnected</div>
-
-    <div class="container">
-        <!-- CALLER'S SIDE -->
-        <div class="column">
-            <h2>Caller</h2>
-            <button id="create-offer-btn">1. Create Offer</button>
-            <textarea id="offer-sdp-textarea" placeholder="Offer SDP will appear here..." readonly></textarea>
-            
-            <label for="paste-answer-textarea">Paste Answer Here:</label>
-            <textarea id="paste-answer-textarea" placeholder="Paste the answer from the callee here..."></textarea>
-            <button id="set-answer-btn">3. Set Answer & Connect</button>
+    <div class="grid">
+      <section class="card">
+        <h2>Caller side</h2>
+        <div class="row" style="margin-bottom:8px;">
+          <button id="btnCreateOffer" class="primary">Create Offer</button>
+          <button id="btnCopyOffer" class="secondary" disabled>Copy Offer</button>
         </div>
-
-        <!-- CALLEE'S SIDE -->
-        <div class="column">
-            <h2>Callee</h2>
-            <label for="paste-offer-textarea">Paste Offer Here:</label>
-            <textarea id="paste-offer-textarea" placeholder="Paste the offer from the caller here..."></textarea>
-            <button id="create-answer-btn">2. Create Answer</button>
-
-            <textarea id="answer-sdp-textarea" placeholder="Answer SDP will appear here..." readonly></textarea>
+        <textarea id="localOffer" placeholder="Your local Offer (send this to the remote peer)" readonly></textarea>
+        <div style="height:8px;"></div>
+        <textarea id="remoteAnswer" placeholder="Paste the remote Answer here"></textarea>
+        <div class="row" style="margin-top:8px;">
+          <button id="btnSetRemoteAnswer">Set Remote Answer</button>
         </div>
+      </section>
+
+      <section class="card">
+        <h2>Callee side</h2>
+        <textarea id="remoteOffer" placeholder="Paste the remote Offer here"></textarea>
+        <div class="row" style="margin:8px 0;">
+          <button id="btnSetRemoteOffer" class="primary">Set Remote Offer</button>
+          <button id="btnCreateAnswer" class="secondary" disabled>Create Answer</button>
+          <button id="btnCopyAnswer" class="secondary" disabled>Copy Answer</button>
+        </div>
+        <textarea id="localAnswer" placeholder="Your local Answer (send this to the caller)" readonly></textarea>
+      </section>
     </div>
-    
-    <button id="reset-btn" style="background-color: #dc3545;">Reset Connection</button>
 
-    <div id="chat-container">
-        <h2>Chat</h2>
-        <div id="chat-log"></div>
-        <input type="text" id="message-input" placeholder="Type your message...">
-        <button id="send-btn">Send</button>
-    </div>
+    <details>
+      <summary>Optional: Manually exchange ICE candidates (only if connection fails)</summary>
+      <div class="grid" style="margin-top:10px;">
+        <section class="card">
+          <h3>Local ICE candidates to share</h3>
+          <div class="row" style="margin-bottom:8px;">
+            <button id="btnCopyCandidates" disabled>Copy All Candidates</button>
+          </div>
+          <pre id="localCandidates" class="mono"></pre>
+        </section>
+        <section class="card">
+          <h3>Paste remote ICE candidates (one JSON per line)</h3>
+          <textarea id="remoteCandidates" placeholder='{"candidate":"candidate:...","sdpMid":"0","sdpMLineIndex":0}'></textarea>
+          <div class="row" style="margin-top:8px;">
+            <button id="btnAddCandidates">Add Candidates</button>
+          </div>
+        </section>
+      </div>
+    </details>
 
-    <script>
-        // DOM Elements
-        const createOfferBtn = document.getElementById('create-offer-btn');
-        const createAnswerBtn = document.getElementById('create-answer-btn');
-        const setAnswerBtn = document.getElementById('set-answer-btn');
-        const resetBtn = document.getElementById('reset-btn');
-        const sendBtn = document.getElementById('send-btn');
-        
-        const offerSdpTextarea = document.getElementById('offer-sdp-textarea');
-        const answerSdpTextarea = document.getElementById('answer-sdp-textarea');
-        const pasteOfferTextarea = document.getElementById('paste-offer-textarea');
-        const pasteAnswerTextarea = document.getElementById('paste-answer-textarea');
-        
-        const statusDiv = document.getElementById('status');
-        const chatContainer = document.getElementById('chat-container');
-        const chatLog = document.getElementById('chat-log');
-        const messageInput = document.getElementById('message-input');
+    <section class="card">
+      <h2>Chat</h2>
+      <div id="chatLog" class="log"></div>
+      <div class="row" style="margin-top:10px;">
+        <input type="text" id="chatInput" placeholder="Type a message and press Enter" disabled>
+        <button id="btnSend" disabled>Send</button>
+        <button id="btnReset" class="danger">Reset</button>
+      </div>
+    </section>
 
-        // WebRTC Globals
-        let peerConnection;
-        let dataChannel;
-        const configuration = {
-            'iceServers': [{ 'urls': 'stun:stun.l.google.com:19302' }]
-        };
+    <footer>
+      Usage: Caller clicks "Create Offer" and sends the Offer. Callee pastes Offer and clicks "Set Remote Offer", then clicks "Create Answer" and sends it back. Caller pastes Answer and clicks "Set Remote Answer". Wait for ICE gathering to say "complete" before copying.
+    </footer>
+  </div>
 
-        // Event Listeners
-        createOfferBtn.addEventListener('click', createOffer);
-        createAnswerBtn.addEventListener('click', createAnswer);
-        setAnswerBtn.addEventListener('click', setAnswer);
-        sendBtn.addEventListener('click', sendMessage);
-        resetBtn.addEventListener('click', () => window.location.reload());
+  <script>
+    // Elements
+    const els = {
+      role: document.getElementById('role'),
+      signalingState: document.getElementById('signalingState'),
+      iceGatheringState: document.getElementById('iceGatheringState'),
+      iceConnectionState: document.getElementById('iceConnectionState'),
+      connectionState: document.getElementById('connectionState'),
 
-        function initializePeerConnection() {
-            peerConnection = new RTCPeerConnection(configuration);
+      btnCreateOffer: document.getElementById('btnCreateOffer'),
+      btnCopyOffer: document.getElementById('btnCopyOffer'),
+      localOffer: document.getElementById('localOffer'),
+      remoteAnswer: document.getElementById('remoteAnswer'),
+      btnSetRemoteAnswer: document.getElementById('btnSetRemoteAnswer'),
 
-            // This is the crucial part for manual signaling without trickle ICE.
-            // We'll wait for the ICE gathering to complete before generating the SDP.
-            peerConnection.onicegatheringstatechange = () => {
-                if (peerConnection.iceGatheringState === 'complete') {
-                    console.log("ICE Gathering Complete. Final SDP is ready.");
-                    // The localDescription now contains all candidates.
-                    // We can now show this to the user for copy-pasting.
-                    if (peerConnection.localDescription.type === 'offer') {
-                        offerSdpTextarea.value = JSON.stringify(peerConnection.localDescription);
-                    } else if (peerConnection.localDescription.type === 'answer') {
-                        answerSdpTextarea.value = JSON.stringify(peerConnection.localDescription);
-                    }
-                }
-            };
+      remoteOffer: document.getElementById('remoteOffer'),
+      btnSetRemoteOffer: document.getElementById('btnSetRemoteOffer'),
+      btnCreateAnswer: document.getElementById('btnCreateAnswer'),
+      btnCopyAnswer: document.getElementById('btnCopyAnswer'),
+      localAnswer: document.getElementById('localAnswer'),
 
-            peerConnection.onconnectionstatechange = () => {
-                updateStatus(`Connection State: ${peerConnection.connectionState}`);
-                if (peerConnection.connectionState === 'connected') {
-                    statusDiv.className = 'status-connected';
-                    statusDiv.textContent = 'Status: Connected';
-                    chatContainer.style.display = 'block';
-                } else if (peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'closed') {
-                    statusDiv.className = 'status-disconnected';
-                    statusDiv.textContent = 'Status: Disconnected';
-                    chatContainer.style.display = 'none';
-                }
-            };
+      localCandidates: document.getElementById('localCandidates'),
+      remoteCandidates: document.getElementById('remoteCandidates'),
+      btnCopyCandidates: document.getElementById('btnCopyCandidates'),
+      btnAddCandidates: document.getElementById('btnAddCandidates'),
 
-            // This handler is for the callee to receive the data channel from the caller
-            peerConnection.ondatachannel = (event) => {
-                dataChannel = event.channel;
-                setupDataChannelEvents();
-                console.log("Data channel received.");
-            };
+      chatLog: document.getElementById('chatLog'),
+      chatInput: document.getElementById('chatInput'),
+      btnSend: document.getElementById('btnSend'),
+      btnReset: document.getElementById('btnReset'),
+    };
+
+    // WebRTC state
+    let pc = null;
+    let dataChannel = null;
+    let lastAction = null; // 'offering' | 'answering'
+    let role = 'idle';
+
+    const rtcConfig = {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ],
+      iceCandidatePoolSize: 0
+    };
+
+    function updateStatus() {
+      if (!pc) {
+        els.role.textContent = 'idle';
+        els.signalingState.textContent = '-';
+        els.iceGatheringState.textContent = '-';
+        els.iceConnectionState.textContent = '-';
+        els.connectionState.textContent = '-';
+        return;
+      }
+      els.role.textContent = role;
+      els.signalingState.textContent = pc.signalingState;
+      els.iceGatheringState.textContent = pc.iceGatheringState;
+      els.iceConnectionState.textContent = pc.iceConnectionState;
+      els.connectionState.textContent = pc.connectionState;
+    }
+
+    function descriptionToJson(desc) {
+      return JSON.stringify({ type: desc.type, sdp: desc.sdp }, null, 2);
+    }
+
+    function parseDescription(str) {
+      const obj = JSON.parse(str);
+      if (!obj || !obj.type || !obj.sdp) throw new Error('Invalid description JSON');
+      return obj;
+    }
+
+    function setTextareaValue(id, value) {
+      const el = typeof id === 'string' ? document.getElementById(id) : id;
+      el.value = value;
+    }
+
+    function enable(elOrId, enabled) {
+      const el = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId;
+      el.disabled = !enabled;
+    }
+
+    function copyToClipboard(text) {
+      if (!text) return;
+      navigator.clipboard?.writeText(text).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.style.position = 'fixed';
+        ta.style.left = '-10000px';
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      });
+    }
+
+    function log(who, message) {
+      const row = document.createElement('div');
+      row.className = 'msg';
+      const whoEl = document.createElement('span');
+      whoEl.className = 'who';
+      whoEl.textContent = who + ':';
+      const textEl = document.createElement('span');
+      textEl.className = 'text';
+      textEl.textContent = message;
+      row.appendChild(whoEl);
+      row.appendChild(textEl);
+      els.chatLog.appendChild(row);
+      els.chatLog.scrollTop = els.chatLog.scrollHeight;
+    }
+
+    function setChatEnabled(enabled) {
+      els.chatInput.disabled = !enabled;
+      els.btnSend.disabled = !enabled;
+      if (enabled) {
+        els.chatInput.focus();
+      }
+    }
+
+    function appendLocalCandidate(c) {
+      const line = JSON.stringify({ candidate: c.candidate, sdpMid: c.sdpMid, sdpMLineIndex: c.sdpMLineIndex });
+      els.localCandidates.textContent += (els.localCandidates.textContent ? '\n' : '') + line;
+      enable(els.btnCopyCandidates, true);
+    }
+
+    function createPeerConnection(isCaller) {
+      if (pc) {
+        try { pc.close(); } catch (_) {}
+      }
+      pc = new RTCPeerConnection(rtcConfig);
+      role = isCaller ? 'caller' : 'callee';
+      updateStatus();
+
+      pc.onicegatheringstatechange = () => {
+        updateStatus();
+        if (pc.iceGatheringState === 'complete') {
+          if (lastAction === 'offering' && pc.localDescription) {
+            setTextareaValue(els.localOffer, descriptionToJson(pc.localDescription));
+            enable(els.btnCopyOffer, true);
+          } else if (lastAction === 'answering' && pc.localDescription) {
+            setTextareaValue(els.localAnswer, descriptionToJson(pc.localDescription));
+            enable(els.btnCopyAnswer, true);
+          }
+          enable(els.btnCopyCandidates, true);
         }
+      };
 
-        function setupDataChannelEvents() {
-            dataChannel.onopen = () => {
-                console.log("Data channel is open.");
-                updateStatus("Data Channel: Open");
-            };
-            dataChannel.onclose = () => {
-                console.log("Data channel is closed.");
-                updateStatus("Data Channel: Closed");
-            };
-            dataChannel.onmessage = (event) => {
-                appendLog(`Friend: ${event.data}`);
-            };
+      pc.oniceconnectionstatechange = updateStatus;
+      pc.onconnectionstatechange = updateStatus;
+      pc.onsignalingstatechange = updateStatus;
+
+      pc.onicecandidate = (ev) => {
+        if (ev.candidate) appendLocalCandidate(ev.candidate);
+      };
+
+      pc.ondatachannel = (ev) => {
+        dataChannel = ev.channel;
+        wireDataChannel();
+      };
+
+      return pc;
+    }
+
+    function wireDataChannel() {
+      if (!dataChannel) return;
+      dataChannel.onopen = () => {
+        log('System', 'Data channel open');
+        setChatEnabled(true);
+      };
+      dataChannel.onmessage = (ev) => log('Peer', String(ev.data ?? ''));
+      dataChannel.onclose = () => {
+        log('System', 'Data channel closed');
+        setChatEnabled(false);
+      };
+      dataChannel.onerror = (e) => console.error('DataChannel error', e);
+    }
+
+    async function handleCreateOffer() {
+      try {
+        if (!pc) createPeerConnection(true);
+        if (!dataChannel) {
+          dataChannel = pc.createDataChannel('chat');
+          wireDataChannel();
         }
+        lastAction = 'offering';
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        setTextareaValue(els.localOffer, descriptionToJson(pc.localDescription));
+        enable(els.btnCopyOffer, true);
+        updateStatus();
+      } catch (err) {
+        console.error(err);
+        alert('Failed to create offer. See console.');
+      }
+    }
 
-        async function createOffer() {
-            updateStatus("Creating Offer...");
-            initializePeerConnection();
-            
-            // The caller creates the data channel
-            dataChannel = peerConnection.createDataChannel("chat");
-            setupDataChannelEvents();
+    async function handleSetRemoteAnswer() {
+      try {
+        if (!pc) throw new Error('Create an offer first');
+        const ansStr = els.remoteAnswer.value.trim();
+        if (!ansStr) return alert('Paste remote Answer JSON first');
+        const answer = parseDescription(ansStr);
+        await pc.setRemoteDescription(answer);
+        log('System', 'Remote answer set. Connecting...');
+        updateStatus();
+      } catch (err) {
+        console.error(err);
+        alert('Failed to set remote answer. See console.');
+      }
+    }
 
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            
-            // The onicegatheringstatechange handler will update the textarea when ready.
-            updateStatus("Offer created. Waiting for ICE candidates...");
+    async function handleSetRemoteOffer() {
+      try {
+        const offStr = els.remoteOffer.value.trim();
+        if (!offStr) return alert('Paste remote Offer JSON first');
+        if (!pc) createPeerConnection(false);
+        const offer = parseDescription(offStr);
+        await pc.setRemoteDescription(offer);
+        enable(els.btnCreateAnswer, true);
+        log('System', 'Remote offer set. Ready to create answer.');
+        updateStatus();
+      } catch (err) {
+        console.error(err);
+        alert('Failed to set remote offer. See console.');
+      }
+    }
+
+    async function handleCreateAnswer() {
+      try {
+        if (!pc) throw new Error('Set remote Offer first');
+        lastAction = 'answering';
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        setTextareaValue(els.localAnswer, descriptionToJson(pc.localDescription));
+        enable(els.btnCopyAnswer, true);
+        updateStatus();
+      } catch (err) {
+        console.error(err);
+        alert('Failed to create answer. See console.');
+      }
+    }
+
+    function handleCopy(el) {
+      copyToClipboard(el.value);
+    }
+
+    function handleCopyCandidates() {
+      copyToClipboard(els.localCandidates.textContent);
+    }
+
+    async function handleAddCandidates() {
+      try {
+        if (!pc) throw new Error('No peer connection');
+        const text = els.remoteCandidates.value.trim();
+        if (!text) return;
+        const lines = text.split('\n').map(s => s.trim()).filter(Boolean);
+        for (const line of lines) {
+          const cand = JSON.parse(line);
+          await pc.addIceCandidate(cand);
         }
+        els.remoteCandidates.value = '';
+        log('System', `Added ${lines.length} remote candidate(s).`);
+      } catch (err) {
+        console.error(err);
+        alert('Failed adding one or more candidates. See console.');
+      }
+    }
 
-        async function createAnswer() {
-            if (!pasteOfferTextarea.value) {
-                alert("Please paste the offer first!");
-                return;
-            }
-            updateStatus("Creating Answer...");
-            initializePeerConnection();
-            
-            const offer = JSON.parse(pasteOfferTextarea.value);
-            await peerConnection.setRemoteDescription(offer);
-            
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
+    function handleSend() {
+      const msg = els.chatInput.value;
+      if (!msg) return;
+      if (!dataChannel || dataChannel.readyState !== 'open') {
+        return alert('Data channel is not open yet');
+      }
+      dataChannel.send(msg);
+      log('You', msg);
+      els.chatInput.value = '';
+      els.chatInput.focus();
+    }
 
-            // The onicegatheringstatechange handler will update the textarea when ready.
-            updateStatus("Answer created. Waiting for ICE candidates...");
-        }
+    function resetAll() {
+      try { if (dataChannel) dataChannel.close(); } catch(_) {}
+      try { if (pc) pc.close(); } catch(_) {}
+      pc = null;
+      dataChannel = null;
+      lastAction = null;
+      role = 'idle';
+      // Clear UI
+      els.localOffer.value = '';
+      els.remoteAnswer.value = '';
+      els.remoteOffer.value = '';
+      els.localAnswer.value = '';
+      els.localCandidates.textContent = '';
+      els.remoteCandidates.value = '';
+      els.chatLog.innerHTML = '';
+      setChatEnabled(false);
+      // Buttons
+      enable(els.btnCopyOffer, false);
+      enable(els.btnCopyAnswer, false);
+      enable(els.btnCreateAnswer, false);
+      enable(els.btnCopyCandidates, false);
+      updateStatus();
+    }
 
-        async function setAnswer() {
-            if (!pasteAnswerTextarea.value) {
-                alert("Please paste the answer first!");
-                return;
-            }
-            updateStatus("Setting Answer & Connecting...");
-            
-            const answer = JSON.parse(pasteAnswerTextarea.value);
-            await peerConnection.setRemoteDescription(answer);
-            updateStatus("Answer set. Connection process initiated.");
-        }
+    // Wire UI events
+    els.btnCreateOffer.addEventListener('click', handleCreateOffer);
+    els.btnCopyOffer.addEventListener('click', () => handleCopy(els.localOffer));
+    els.btnSetRemoteAnswer.addEventListener('click', handleSetRemoteAnswer);
 
-        function sendMessage() {
-            const message = messageInput.value;
-            if (message && dataChannel && dataChannel.readyState === 'open') {
-                dataChannel.send(message);
-                appendLog(`You: ${message}`);
-                messageInput.value = '';
-            }
-        }
+    els.btnSetRemoteOffer.addEventListener('click', handleSetRemoteOffer);
+    els.btnCreateAnswer.addEventListener('click', handleCreateAnswer);
+    els.btnCopyAnswer.addEventListener('click', () => handleCopy(els.localAnswer));
 
-        function appendLog(message) {
-            chatLog.textContent += message + '\n';
-            chatLog.scrollTop = chatLog.scrollHeight; // Auto-scroll
-        }
-        
-        function updateStatus(text) {
-            console.log(text);
-        }
+    els.btnCopyCandidates.addEventListener('click', handleCopyCandidates);
+    els.btnAddCandidates.addEventListener('click', handleAddCandidates);
 
-    </script>
+    els.btnSend.addEventListener('click', handleSend);
+    els.chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleSend(); });
+    els.btnReset.addEventListener('click', resetAll);
+
+    // Init
+    updateStatus();
+  </script>
 </body>
 </html>
