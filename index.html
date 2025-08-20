@@ -2,485 +2,398 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRTC Manual Signaling Chat</title>
+    <title>Manual WebRTC Chat</title>
     <style>
+        /* General Layout & Typography */
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f4f4f4;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        .container {
-            background-color: #fff;
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            width: 90%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
             max-width: 800px;
-            margin-bottom: 20px;
-        }
-        h1, h2 {
+            margin: 20px auto;
+            padding: 1em;
+            background-color: #f4f4f9;
             color: #333;
-            text-align: center;
-            margin-bottom: 20px;
         }
+
+        h1, h3 {
+            color: #0056b3;
+        }
+
+        /* Fieldset for grouping controls */
+        fieldset {
+            margin-top: 1.5em;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        legend {
+            font-weight: bold;
+            font-size: 1.2em;
+            color: #333;
+            padding: 0 10px;
+        }
+
+        /* Textareas for signaling data */
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            margin-top: 5px;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 0.9em;
+            resize: vertical;
+        }
+        
+        textarea:read-only {
+            background-color: #e9ecef;
+        }
+
+        /* Buttons */
         button {
-            background-color: #007bff;
-            color: white;
+            margin-top: 10px;
             padding: 10px 15px;
             border: none;
             border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            font-size: 1em;
             cursor: pointer;
-            font-size: 16px;
-            margin-right: 10px;
+            transition: background-color 0.2s;
         }
-        button:hover:not(:disabled) {
+
+        button:hover {
             background-color: #0056b3;
         }
+        
         button:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
         }
-        textarea {
-            width: calc(100% - 20px);
+
+        /* Status Display */
+        #status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        
+        /* Chat Interface */
+        #chat-section {
+            display: none; /* Initially hidden */
+        }
+        
+        #messages {
+            height: 250px;
+            border: 1px solid #ddd;
+            overflow-y: scroll;
             padding: 10px;
             margin-bottom: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            box-sizing: border-box; /* Include padding in width */
-            resize: vertical;
-            min-height: 80px;
+            background: #f9f9f9;
+            border-radius: 4px;
         }
-        .message-input-area {
-            display: flex;
-            margin-top: 15px;
-        }
-        .message-input-area input[type="text"] {
-            flex-grow: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            margin-right: 10px;
-        }
-        .chat-log {
-            border: 1px solid #ddd;
-            background-color: #e9e9e9;
-            padding: 10px;
-            min-height: 200px;
-            max-height: 400px;
-            overflow-y: auto;
-            border-radius: 5px;
-            margin-top: 15px;
-        }
-        .chat-log p {
-            margin: 5px 0;
+
+        .message {
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            border-radius: 15px;
+            max-width: 70%;
             word-wrap: break-word;
         }
-        .chat-log p.local {
-            text-align: right;
-            color: #007bff;
+
+        .local {
+            background-color: #007bff;
+            color: white;
+            margin-left: auto;
+            border-bottom-right-radius: 3px;
         }
-        .chat-log p.remote {
-            text-align: left;
-            color: #28a745;
-        }
-        .button-group {
-            margin-bottom: 15px;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            color: #555;
-        }
-        .status {
-            margin-top: 10px;
-            font-weight: bold;
-            color: #007bff;
-        }
-        #peerConnectionState, #dataChannelState, #iceGatheringState, #iceConnectionState {
-            font-weight: normal;
+
+        .remote {
+            background-color: #e9ecef;
             color: #333;
+            margin-right: auto;
+            border-bottom-left-radius: 3px;
+        }
+        
+        #messageInput {
+            width: calc(100% - 80px);
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        #sendBtn {
+            width: 70px;
+            margin-left: 5px;
         }
     </style>
 </head>
 <body>
-    <h1>WebRTC Manual Signaling Chat</h1>
+    <h1>Manual WebRTC Chat Demo</h1>
+    <p>Follow the steps carefully to connect with your peer. This demo consolidates all connection data (SDP and ICE Candidates) into a single text block for easier copy-pasting.</p>
 
-    <div class="container">
-        <h2>Connection Setup</h2>
-        <div class="button-group">
-            <button id="createOfferBtn">1. Create Offer</button>
-            <button id="createAnswerBtn" disabled>3. Create Answer</button>
-            <button id="disconnectBtn" disabled>Disconnect</button>
+    <fieldset id="signaling-section">
+        <legend>1. Connection Setup (Signaling)</legend>
+        <div>
+            <h3>Peer 1 (Initiator)</h3>
+            <button id="createOfferBtn">Create Offer</button>
+            <p><strong>Your Offer Data:</strong></p>
+            <textarea id="offerSdp" readonly placeholder="Your Offer SDP and ICE Candidates will appear here. Copy this entire text and send it to Peer 2."></textarea>
         </div>
-
-        <h3>Your Local SDP (Offer/Answer)</h3>
-        <label for="localSdpTextarea">Copy this to the other peer:</label>
-        <textarea id="localSdpTextarea" rows="6" readonly></textarea>
-        <button onclick="copyToClipboard('localSdpTextarea')">Copy Local SDP</button>
-
-        <h3>Remote SDP (From other peer)</h3>
-        <label for="remoteSdpTextarea">Paste SDP from the other peer here:</label>
-        <textarea id="remoteSdpTextarea" rows="6"></textarea>
-        <button id="setRemoteSdpBtn" disabled>2./4. Set Remote SDP</button>
-
-        <h3>Your Local ICE Candidates</h3>
-        <label for="localCandidatesTextarea">Copy these to the other peer:</label>
-        <textarea id="localCandidatesTextarea" rows="6" readonly></textarea>
-        <button onclick="copyToClipboard('localCandidatesTextarea')">Copy Local Candidates</button>
-
-        <h3>Remote ICE Candidates (From other peer)</h3>
-        <label for="remoteCandidatesTextarea">Paste ICE candidates from the other peer here:</label>
-        <textarea id="remoteCandidatesTextarea" rows="6"></textarea>
-        <button id="addRemoteCandidatesBtn" disabled>Add Remote Candidates</button>
-
-        <div class="status">
-            Peer Connection State: <span id="peerConnectionState">disconnected</span><br>
-            Data Channel State: <span id="dataChannelState">closed</span><br>
-            ICE Gathering State: <span id="iceGatheringState">new</span><br>
-            ICE Connection State: <span id="iceConnectionState">new</span>
+        <hr>
+        <div>
+            <h3>Peer 2 (Receiver)</h3>
+            <p><strong>Paste Offer from Peer 1:</strong></p>
+            <textarea id="remoteSdp" placeholder="Paste the text from Peer 1 here."></textarea>
+            <button id="createAnswerBtn">Create Answer</button>
+            <p><strong>Your Answer Data:</strong></p>
+            <textarea id="answerSdp" readonly placeholder="Your Answer SDP and ICE Candidates will appear here. Copy this and send back to Peer 1."></textarea>
         </div>
-    </div>
+        <hr>
+        <div>
+            <h3>Peer 1 (Final Step)</h3>
+            <p><strong>Paste Answer from Peer 2:</strong></p>
+            <textarea id="remoteAnswerSdp" placeholder="Paste the text from Peer 2 here."></textarea>
+            <button id="addAnswerBtn">Add Answer & Connect</button>
+        </div>
+    </fieldset>
 
-    <div class="container">
-        <h2>Chat Window</h2>
-        <div class="chat-log" id="chatLog">
-            <!-- Messages will appear here -->
-        </div>
-        <div class="message-input-area">
-            <input type="text" id="messageInput" placeholder="Type your message..." disabled>
-            <button id="sendMessageBtn" disabled>Send</button>
-        </div>
-    </div>
+    <fieldset>
+        <legend>2. Connection Status</legend>
+        <div id="status">Status: Disconnected</div>
+    </fieldset>
+
+    <fieldset id="chat-section">
+        <legend>3. Chat</legend>
+        <div id="messages"></div>
+        <input type="text" id="messageInput" placeholder="Type your message..." disabled>
+        <button id="sendBtn" disabled>Send</button>
+    </fieldset>
 
     <script>
-        // --- DOM Elements ---
-        const createOfferBtn = document.getElementById('createOfferBtn');
-        const createAnswerBtn = document.getElementById('createAnswerBtn');
-        const setRemoteSdpBtn = document.getElementById('setRemoteSdpBtn');
-        const disconnectBtn = document.getElementById('disconnectBtn');
-        const addRemoteCandidatesBtn = document.getElementById('addRemoteCandidatesBtn');
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Global Variables ---
+            let peerConnection = null;
+            let dataChannel = null;
 
-        const localSdpTextarea = document.getElementById('localSdpTextarea');
-        const remoteSdpTextarea = document.getElementById('remoteSdpTextarea');
-        const localCandidatesTextarea = document.getElementById('localCandidatesTextarea');
-        const remoteCandidatesTextarea = document.getElementById('remoteCandidatesTextarea');
+            // --- DOM Element References ---
+            const createOfferBtn = document.getElementById('createOfferBtn');
+            const createAnswerBtn = document.getElementById('createAnswerBtn');
+            const addAnswerBtn = document.getElementById('addAnswerBtn');
+            const sendBtn = document.getElementById('sendBtn');
+            
+            const offerSdpTextarea = document.getElementById('offerSdp');
+            const remoteSdpTextarea = document.getElementById('remoteSdp');
+            const answerSdpTextarea = document.getElementById('answerSdp');
+            const remoteAnswerSdpTextarea = document.getElementById('remoteAnswerSdp');
+            
+            const messageInput = document.getElementById('messageInput');
+            const messagesDiv = document.getElementById('messages');
+            const statusDiv = document.getElementById('status');
+            
+            const signalingSection = document.getElementById('signaling-section');
+            const chatSection = document.getElementById('chat-section');
 
-        const messageInput = document.getElementById('messageInput');
-        const sendMessageBtn = document.getElementById('sendMessageBtn');
-        const chatLog = document.getElementById('chatLog');
+            // --- WebRTC Configuration ---
+            const configuration = {
+                iceServers: [{
+                    urls: 'stun:stun.l.google.com:19302' // Public Google STUN server
+                }]
+            };
 
-        const peerConnectionStateSpan = document.getElementById('peerConnectionState');
-        const dataChannelStateSpan = document.getElementById('dataChannelState');
-        const iceGatheringStateSpan = document.getElementById('iceGatheringState');
-        const iceConnectionStateSpan = document.getElementById('iceConnectionState');
+            // --- Event Listeners ---
+            createOfferBtn.addEventListener('click', createOffer);
+            createAnswerBtn.addEventListener('click', createAnswer);
+            addAnswerBtn.addEventListener('click', addAnswer);
+            sendBtn.addEventListener('click', sendMessage);
 
-        // --- WebRTC Variables ---
-        let pc = null; // RTCPeerConnection
-        let dataChannel = null; // RTCDataChannel
-        const localCandidates = []; // Array to store gathered ICE candidates
+            // --- Core WebRTC Functions ---
 
-        // --- Configuration ---
-        const rtcConfiguration = {
-            'iceServers': [
-                // Public STUN server from documentation (Google's)
-                {'urls': 'stun:stun.l.google.com:19302'}
-                // You can add more STUN/TURN servers here for better NAT traversal
-            ]
-        };
+            /**
+             * Peer 1: Creates an offer and sets up the peer connection.
+             */
+            async function createOffer() {
+                updateStatus('Creating Offer...');
+                peerConnection = new RTCPeerConnection(configuration);
+                
+                // Set up event handlers for the peer connection
+                setupPeerConnectionEvents(peerConnection);
 
-        // --- Utility Functions ---
-        function appendMessage(message, type) {
-            const p = document.createElement('p');
-            p.classList.add(type);
-            p.textContent = message;
-            chatLog.appendChild(p);
-            chatLog.scrollTop = chatLog.scrollHeight; // Scroll to bottom
-        }
+                // Create the data channel *before* creating the offer
+                dataChannel = peerConnection.createDataChannel("chatChannel");
+                setupDataChannelEvents(dataChannel);
 
-        function updateConnectionStates() {
-            if (pc) {
-                peerConnectionStateSpan.textContent = pc.connectionState;
-                iceGatheringStateSpan.textContent = pc.iceGatheringState;
-                iceConnectionStateSpan.textContent = pc.iceConnectionState;
-            } else {
-                peerConnectionStateSpan.textContent = 'disconnected';
-                iceGatheringStateSpan.textContent = 'new';
-                iceConnectionStateSpan.textContent = 'new';
-            }
-            if (dataChannel) {
-                dataChannelStateSpan.textContent = dataChannel.readyState;
-            } else {
-                dataChannelStateSpan.textContent = 'closed';
-            }
-        }
-
-        function copyToClipboard(elementId) {
-            const textarea = document.getElementById(elementId);
-            textarea.select();
-            textarea.setSelectionRange(0, 99999); // For mobile devices
-            document.execCommand('copy');
-            alert('Content copied to clipboard!');
-        }
-
-        function resetUI() {
-            createOfferBtn.disabled = false;
-            createAnswerBtn.disabled = true;
-            setRemoteSdpBtn.disabled = true;
-            disconnectBtn.disabled = true;
-            addRemoteCandidatesBtn.disabled = true;
-
-            localSdpTextarea.value = '';
-            remoteSdpTextarea.value = '';
-            localCandidatesTextarea.value = '';
-            remoteCandidatesTextarea.value = '';
-
-            messageInput.disabled = true;
-            sendMessageBtn.disabled = true;
-            chatLog.innerHTML = ''; // Clear chat history
-            localCandidates.length = 0; // Clear stored candidates
-
-            updateConnectionStates();
-        }
-
-        // --- WebRTC Core Functions ---
-
-        async function createPeerConnection() {
-            pc = new RTCPeerConnection(rtcConfiguration);
-            localCandidates.length = 0; // Reset candidates for new connection
-
-            // Listen for ICE candidates
-            pc.onicecandidate = (event) => {
-                if (event.candidate) {
-                    localCandidates.push(event.candidate);
-                    localCandidatesTextarea.value = JSON.stringify(localCandidates, null, 2);
-                } else {
-                    // All candidates have been gathered (event.candidate is null)
-                    console.log('ICE Gathering Complete');
+                try {
+                    const offer = await peerConnection.createOffer();
+                    await peerConnection.setLocalDescription(offer);
+                    createOfferBtn.disabled = true;
+                } catch (e) {
+                    handleError(e);
                 }
-            };
+            }
 
-            // Listen for data channels created by the remote peer
-            pc.ondatachannel = (event) => {
-                dataChannel = event.channel;
-                console.log('Remote data channel created:', dataChannel.label);
-                setupDataChannelListeners(dataChannel);
-            };
+            /**
+             * Peer 2: Creates an answer after receiving the offer.
+             */
+            async function createAnswer() {
+                if (!remoteSdpTextarea.value) {
+                    return alert('Please paste the offer from Peer 1 first.');
+                }
+                updateStatus('Creating Answer...');
+                peerConnection = new RTCPeerConnection(configuration);
 
-            // Listen for connection state changes
-            pc.onconnectionstatechange = () => {
-                console.log('Peer Connection State:', pc.connectionState);
-                updateConnectionStates();
-                if (pc.connectionState === 'connected') {
-                    messageInput.disabled = false;
-                    sendMessageBtn.disabled = false;
-                } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-                    // Consider re-enabling 'create offer' or 'create answer' depending on desired flow
-                    // For this simple demo, we'll just reset UI.
-                    if (pc.connectionState !== 'closed') { // Only if not explicitly closed by user
-                        alert('Peer connection disconnected or failed. Please restart.');
+                // Setup event handlers
+                setupPeerConnectionEvents(peerConnection);
+                
+                // The receiver listens for the data channel to be opened by the sender
+                peerConnection.ondatachannel = (event) => {
+                    dataChannel = event.channel;
+                    setupDataChannelEvents(dataChannel);
+                };
+                
+                try {
+                    const offer = JSON.parse(remoteSdpTextarea.value);
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+                    
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    
+                    remoteSdpTextarea.disabled = true;
+                    createAnswerBtn.disabled = true;
+                } catch (e) {
+                    handleError(e);
+                }
+            }
+
+            /**
+             * Peer 1: Adds the answer from Peer 2 to complete the connection.
+             */
+            async function addAnswer() {
+                if (!peerConnection) {
+                    return alert('Please create an offer first.');
+                }
+                if (!remoteAnswerSdpTextarea.value) {
+                    return alert('Please paste the answer from Peer 2 first.');
+                }
+                updateStatus('Connecting...');
+
+                try {
+                    const answer = JSON.parse(remoteAnswerSdpTextarea.value);
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                    remoteAnswerSdpTextarea.disabled = true;
+                    addAnswerBtn.disabled = true;
+                } catch (e) {
+                    handleError(e);
+                }
+            }
+
+            // --- Helper Functions ---
+
+            /**
+             * Sets up common event handlers for an RTCPeerConnection instance.
+             */
+            function setupPeerConnectionEvents(pc) {
+                // This event fires when a new ICE candidate is found.
+                pc.onicecandidate = (event) => {
+                    // When the browser has finished gathering candidates, event.candidate will be null.
+                    // This is our signal to present the complete SDP to the user.
+                    if (!event.candidate) {
+                        updateStatus('ICE Gathering Complete. Copy the data below.');
+                        // For the offerer, we populate the offer textarea
+                        if(pc.localDescription.type === 'offer') {
+                            offerSdpTextarea.value = JSON.stringify(pc.localDescription);
+                        } 
+                        // For the answerer, we populate the answer textarea
+                        else if (pc.localDescription.type === 'answer') {
+                            answerSdpTextarea.value = JSON.stringify(pc.localDescription);
+                        }
                     }
-                    disconnectPeers(); // Fully reset UI
+                };
+                
+                // This event fires when the connection state changes.
+                pc.onconnectionstatechange = () => {
+                    updateStatus(`Connection State: ${pc.connectionState}`);
+                    if (pc.connectionState === 'connected') {
+                        // Connection is established! Hide signaling and show chat.
+                        signalingSection.style.display = 'none';
+                        chatSection.style.display = 'block';
+                    }
+                };
+            }
+
+            /**
+             * Sets up event handlers for an RTCDataChannel instance.
+             */
+            function setupDataChannelEvents(dc) {
+                dc.onopen = () => {
+                    updateStatus('Data Channel is open!');
+                    messageInput.disabled = false;
+                    sendBtn.disabled = false;
+                    messageInput.focus();
+                };
+
+                dc.onclose = () => {
+                    updateStatus('Data Channel is closed.');
+                    messageInput.disabled = true;
+                    sendBtn.disabled = true;
+                };
+
+                dc.onmessage = (event) => {
+                    appendMessage(event.data, 'remote');
+                };
+            }
+            
+            /**
+             * Sends a chat message over the data channel.
+             */
+            function sendMessage() {
+                const message = messageInput.value;
+                if (message.trim() === '') return;
+
+                if (dataChannel && dataChannel.readyState === 'open') {
+                    dataChannel.send(message);
+                    appendMessage(message, 'local');
+                    messageInput.value = '';
+                    messageInput.focus();
+                } else {
+                    alert('Data channel is not open.');
                 }
-            };
-
-            // Listen for ICE gathering state changes
-            pc.onicegatheringstatechange = () => {
-                console.log('ICE Gathering State:', pc.iceGatheringState);
-                updateConnectionStates();
-            };
-
-            // Listen for ICE connection state changes
-            pc.oniceconnectionstatechange = () => {
-                console.log('ICE Connection State:', pc.iceConnectionState);
-                updateConnectionStates();
-            };
-
-            updateConnectionStates();
-            console.log('RTCPeerConnection created.');
-            disconnectBtn.disabled = false;
-        }
-
-        function setupDataChannelListeners(channel) {
-            channel.onopen = () => {
-                console.log('Data Channel State: open');
-                updateConnectionStates();
-                messageInput.disabled = false;
-                sendMessageBtn.disabled = false;
-                messageInput.focus();
-                appendMessage('Chat channel opened!', 'system');
-            };
-
-            channel.onmessage = (event) => {
-                console.log('Message received:', event.data);
-                appendMessage(`Remote: ${event.data}`, 'remote');
-            };
-
-            channel.onclose = () => {
-                console.log('Data Channel State: closed');
-                updateConnectionStates();
-                messageInput.disabled = true;
-                sendMessageBtn.disabled = true;
-                appendMessage('Chat channel closed.', 'system');
-            };
-
-            channel.onerror = (error) => {
-                console.error('Data Channel Error:', error);
-                appendMessage(`Data Channel Error: ${error.message}`, 'system');
-            };
-        }
-
-        async function createOffer() {
-            if (pc && pc.connectionState !== 'closed') {
-                console.warn('PeerConnection already exists. Disconnect first.');
-                return;
             }
-            await createPeerConnection(); // Initialize a new peer connection
+            
+            /**
+             * Appends a message to the chat window.
+             */
+            function appendMessage(message, className) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${className}`;
+                messageDiv.textContent = message;
+                messagesDiv.appendChild(messageDiv);
+                
+                // Scroll to the latest message
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+            
+            /**
+             * Updates the status display.
+             */
+            function updateStatus(text) {
+                statusDiv.textContent = text;
+            }
 
-            // Create data channel on the offerer side
-            dataChannel = pc.createDataChannel('chat');
-            console.log('Local data channel created:', dataChannel.label);
-            setupDataChannelListeners(dataChannel);
-
-            try {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                localSdpTextarea.value = JSON.stringify(offer, null, 2);
-                console.log('Offer created and set as local description.');
-                setRemoteSdpBtn.disabled = false; // Enable setting remote SDP
-                createOfferBtn.disabled = true;
-                createAnswerBtn.disabled = true; // Disable until disconnected
-                addRemoteCandidatesBtn.disabled = false;
-                updateConnectionStates();
-            } catch (error) {
-                console.error('Error creating offer:', error);
-                alert('Failed to create offer. Check console for details.');
-            }
-        }
-
-        async function createAnswer() {
-            if (pc && pc.connectionState !== 'closed') {
-                console.warn('PeerConnection already exists. Disconnect first.');
-                return;
-            }
-            await createPeerConnection(); // Initialize a new peer connection
-            // Data channel will be created via ondatachannel event for the answerer
-            try {
-                // Must have remote SDP set before creating an answer
-                if (!pc.remoteDescription) {
-                    alert('Please set Remote SDP (Offer) first before creating an Answer.');
-                    return;
-                }
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                localSdpTextarea.value = JSON.stringify(answer, null, 2);
-                console.log('Answer created and set as local description.');
-                setRemoteSdpBtn.disabled = false; // Enable setting remote SDP
-                createOfferBtn.disabled = true; // Disable until disconnected
-                createAnswerBtn.disabled = true;
-                addRemoteCandidatesBtn.disabled = false;
-                updateConnectionStates();
-            } catch (error) {
-                console.error('Error creating answer:', error);
-                alert('Failed to create answer. Check console for details.');
-            }
-        }
-
-        async function setRemoteSdp() {
-            if (!pc) {
-                alert('Please create an Offer or expect an Offer first!');
-                return;
-            }
-            try {
-                const remoteSdp = JSON.parse(remoteSdpTextarea.value);
-                const rtcSessionDescription = new RTCSessionDescription(remoteSdp);
-                await pc.setRemoteDescription(rtcSessionDescription);
-                console.log('Remote SDP set.');
-                // After setting remote SDP, if it was an offer, you can now create an answer
-                if (remoteSdp.type === 'offer') {
-                    createAnswerBtn.disabled = false; // Enable for the answerer to proceed
-                    setRemoteSdpBtn.disabled = true; // Disable after setting
-                } else if (remoteSdp.type === 'answer') {
-                    // If it was an answer, connection should now be establishing
-                    setRemoteSdpBtn.disabled = true; // Disable after setting
-                    // At this point, the offerer is done with SDP exchange.
-                }
-                updateConnectionStates();
-            } catch (error) {
-                console.error('Error setting remote SDP:', error);
-                alert('Failed to set remote SDP. Ensure it is valid JSON for an Offer/Answer.');
-            }
-        }
-
-        async function addRemoteCandidates() {
-            if (!pc) {
-                alert('Please establish a peer connection first!');
-                return;
-            }
-            try {
-                const candidates = JSON.parse(remoteCandidatesTextarea.value);
-                for (const candidate of candidates) {
-                    await pc.addIceCandidate(new RTCIceCandidate(candidate));
-                    console.log('Added remote ICE candidate:', candidate.candidate);
-                }
-                remoteCandidatesTextarea.value = ''; // Clear after adding
-                addRemoteCandidatesBtn.disabled = true; // Disable after adding
-            } catch (error) {
-                console.error('Error adding remote ICE candidates:', error);
-                alert('Failed to add remote ICE candidates. Ensure they are valid JSON.');
-            }
-        }
-
-        function sendMessage() {
-            const message = messageInput.value;
-            if (message.trim() === '') return;
-
-            if (dataChannel && dataChannel.readyState === 'open') {
-                dataChannel.send(message);
-                appendMessage(`You: ${message}`, 'local');
-                messageInput.value = '';
-            } else {
-                alert('Data channel is not open. Cannot send message.');
-                console.warn('Attempted to send message when data channel is not open.');
-            }
-        }
-
-        function disconnectPeers() {
-            if (dataChannel) {
-                dataChannel.close();
-                dataChannel = null;
-            }
-            if (pc) {
-                pc.close();
-                pc = null;
-            }
-            console.log('Peer connections and data channels closed.');
-            resetUI();
-        }
-
-        // --- Event Listeners ---
-        createOfferBtn.addEventListener('click', createOffer);
-        createAnswerBtn.addEventListener('click', createAnswer);
-        setRemoteSdpBtn.addEventListener('click', setRemoteSdp);
-        disconnectBtn.addEventListener('click', disconnectPeers);
-        addRemoteCandidatesBtn.addEventListener('click', addRemoteCandidates);
-        sendMessageBtn.addEventListener('click', sendMessage);
-        messageInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                sendMessage();
+            /**
+             * Generic error handler to log errors and update status.
+             */
+            function handleError(error) {
+                console.error('WebRTC Error:', error);
+                updateStatus(`Error: ${error.message}`);
             }
         });
-
-        // Initial UI state setup
-        resetUI();
     </script>
 </body>
 </html>
