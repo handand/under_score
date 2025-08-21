@@ -1,21 +1,864 @@
-<!DOCTYPE html>
-<html>
-<head>
-<style>
-body {
-  background-color: black;
-  color: white;
-  font-family: monospace; /* Good for clear underscore */
-  font-size: 2em; /* Make the underscore visible */
-  display: flex; /* For centering the underscore */
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh; /* Ensure it takes full viewport height */
-  margin: 0; /* Remove default body margin */
-}
-</style>
-</head>
-<body>
-_
-</body>
-</html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebRTC Manual-Signaling Chat (Single File)</title>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --panel: #111827;
+        --muted: #94a3b8;
+        --text: #e5e7eb;
+        --accent: #22d3ee;
+        --danger: #f87171;
+        --ok: #34d399;
+        --warn: #fbbf24;
+        --border: #1f2937;
+        --code: #0b1022;
+      }
+
+      html, body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans,
+          Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        color: var(--text);
+        background: radial-gradient(1000px 600px at 10% 0%, #0b122b 0%, #080d22 60%, #060b1b 100%), var(--bg);
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      h1 {
+        font-size: 20px;
+        margin: 0;
+        letter-spacing: 0.3px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 16px;
+      }
+
+      @media (max-width: 980px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .panel {
+        background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px;
+      }
+
+      .panel h2 {
+        font-size: 16px;
+        margin: 0 0 10px 0;
+        font-weight: 600;
+      }
+
+      .row {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .muted {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .kbd {
+        background: #0b1022;
+        border: 1px solid #1b2350;
+        padding: 2px 6px;
+        border-radius: 6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        color: #c7d2fe;
+        font-size: 12px;
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      @media (max-width: 700px) {
+        .controls {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      label.inline {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+      }
+
+      input[type="text"], textarea {
+        width: 100%;
+        box-sizing: border-box;
+        background: var(--code);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 13px;
+      }
+
+      textarea.small {
+        min-height: 80px;
+        resize: vertical;
+      }
+
+      textarea.tall {
+        min-height: 160px;
+        resize: vertical;
+      }
+
+      button {
+        appearance: none;
+        border: 1px solid var(--border);
+        background: #0c1638;
+        color: var(--text);
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.05s ease;
+      }
+
+      button:hover { transform: translateY(-1px); }
+      button:active { transform: translateY(0); }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+      .btn-accent { border-color: #1f7a83; background: #0a2630; }
+      .btn-danger { border-color: #7a1f1f; background: #2a0a0a; }
+
+      .states {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 8px;
+      }
+
+      @media (max-width: 700px) {
+        .states { grid-template-columns: 1fr 1fr; }
+      }
+
+      .state {
+        background: #0b1022;
+        border: 1px solid #16204a;
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-size: 12px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--muted);
+        border: 1px solid #243;
+      }
+
+      .dot.ok { background: var(--ok); }
+      .dot.warn { background: var(--warn); }
+      .dot.bad { background: var(--danger); }
+
+      .stack { display: grid; gap: 10px; }
+
+      .section-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+
+      .pill {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .messages {
+        background: #0b1022;
+        border: 1px solid #16204a;
+        border-radius: 10px;
+        min-height: 220px;
+        max-height: 320px;
+        overflow: auto;
+        padding: 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .msg { margin: 4px 0; }
+      .msg.me { color: #bef264; }
+      .msg.peer { color: #93c5fd; }
+      .msg.sys { color: var(--muted); font-style: italic; }
+
+      .log {
+        background: #0b1022;
+        border: 1px solid #16204a;
+        border-radius: 10px;
+        min-height: 120px;
+        max-height: 220px;
+        overflow: auto;
+        padding: 10px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        font-size: 12px;
+        color: #cbd5e1;
+      }
+
+      details summary {
+        cursor: pointer;
+        color: var(--muted);
+      }
+
+      .error-outline { box-shadow: 0 0 0 2px rgba(248,113,113,0.5) inset; }
+      .success-outline { box-shadow: 0 0 0 2px rgba(52,211,153,0.4) inset; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>WebRTC Chat • Manual Copy/Paste Signaling</h1>
+        <div class="muted">No servers. DataChannel only. STUN for ICE. IPs may appear in SDP.</div>
+      </div>
+
+      <div class="grid">
+        <div class="panel stack">
+          <div class="section-title">
+            <h2>1) Role & Mode</h2>
+            <span id="iceModePill" class="pill">Mode: Non‑trickle (wait for ICE)</span>
+          </div>
+          <div class="row">
+            <label class="inline"><input type="radio" name="role" id="roleCaller" /> I am Caller (create offer)</label>
+            <label class="inline"><input type="radio" name="role" id="roleCallee" /> I am Callee (paste offer)</label>
+          </div>
+          <div class="row">
+            <label class="inline"><input type="checkbox" id="waitIceComplete" checked /> Wait for ICE gathering to complete (recommended)</label>
+          </div>
+          <div class="muted" id="instructions">Choose a role to begin. Only one side should be Caller.</div>
+
+          <hr style="border: none; border-top: 1px solid var(--border);" />
+
+          <div class="section-title">
+            <h2>2) Signaling</h2>
+            <span class="pill">Manual copy/paste</span>
+          </div>
+
+          <div class="controls">
+            <div class="stack">
+              <div class="row">
+                <strong>Local description (JSON)</strong>
+                <button id="copyLocalDescBtn" class="btn-accent" disabled>Copy</button>
+              </div>
+              <textarea id="localDesc" class="tall" readonly placeholder="Will appear after you create an offer (Caller) or answer (Callee)"></textarea>
+
+              <details id="trickleDetails" open>
+                <summary>Advanced: Trickle ICE candidates</summary>
+                <div class="muted">Only needed if you unchecked "Wait for ICE" above. Copy/paste candidates as they appear.</div>
+                <div class="row" style="margin-top:6px">
+                  <strong>Local candidates (newline-separated JSON)</strong>
+                  <button id="copyLocalCandidatesBtn" class="btn-accent" disabled>Copy All</button>
+                </div>
+                <textarea id="localCandidates" class="small" readonly placeholder="Will list local ICE candidates when trickle is enabled"></textarea>
+              </details>
+            </div>
+
+            <div class="stack">
+              <div class="row">
+                <strong>Remote description (paste JSON)</strong>
+                <button id="applyRemoteDescBtn" class="btn-accent" disabled>Apply</button>
+              </div>
+              <textarea id="remoteDesc" class="tall" placeholder="If Caller: paste Answer here, then Apply. If Callee: paste Offer here, then Apply."></textarea>
+
+              <details id="trickleDetailsRemote" open>
+                <summary>Advanced: Remote ICE candidates (newline-separated JSON)</summary>
+                <div class="row" style="margin-top:6px">
+                  <strong>Remote candidates</strong>
+                  <button id="addRemoteCandidatesBtn" class="btn-accent" disabled>Add Candidates</button>
+                </div>
+                <textarea id="remoteCandidates" class="small" placeholder='Paste candidates like {"candidate":"candidate:...","sdpMid":"data","sdpMLineIndex":0}'></textarea>
+              </details>
+
+              <div class="row">
+                <button id="createOfferBtn" class="btn-accent" disabled>Create Offer (Caller)</button>
+                <button id="createAnswerBtn" class="btn-accent" disabled>Accept Offer & Create Answer (Callee)</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="stack">
+            <div class="section-title">
+              <h2>3) Connection States</h2>
+            </div>
+            <div class="states">
+              <div class="state"><span id="dotSignaling" class="dot"></span> signaling: <span id="stateSignaling">-</span></div>
+              <div class="state"><span id="dotGathering" class="dot"></span> iceGathering: <span id="stateIceGathering">-</span></div>
+              <div class="state"><span id="dotIce" class="dot"></span> iceConnection: <span id="stateIceConnection">-</span></div>
+              <div class="state"><span id="dotConn" class="dot"></span> connection: <span id="stateConnection">-</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel stack">
+          <div class="section-title">
+            <h2>4) Chat</h2>
+            <div class="pill">RTCDataChannel</div>
+          </div>
+          <div id="messages" class="messages">
+            <div class="msg sys">Waiting for connection...</div>
+          </div>
+          <div class="row">
+            <input id="messageInput" type="text" placeholder="Type a message" disabled />
+            <button id="sendBtn" disabled>Send</button>
+            <button id="disconnectBtn" class="btn-danger" disabled>Disconnect</button>
+            <button id="resetBtn">Reset</button>
+          </div>
+
+          <div class="section-title" style="margin-top:10px">
+            <h2>Diagnostics</h2>
+            <div class="muted">SDP exposes IPs; use on trusted networks</div>
+          </div>
+          <div id="log" class="log"></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      /*
+       * WebRTC Manual-Signaling Chat
+       *
+       * This single-file app demonstrates a DataChannel-only WebRTC connection
+       * established via manual copy/paste of SDP and (optionally) ICE candidates.
+       * It defaults to non-trickle ICE for fewer manual steps, with an advanced
+       * mode for trickle ICE to reduce setup latency.
+       */
+
+      let pc = null;
+      let chatChannel = null;
+      let isCaller = null;
+      let iceWaitForComplete = true;
+      let pendingRemoteCandidates = [];
+      let iceModeLocked = false;
+
+      const elements = {};
+
+      document.addEventListener("DOMContentLoaded", () => {
+        cacheElements();
+        wireUI();
+        reflectTrickleVisibility();
+        writeInstructions("Choose a role to begin. Only one side should be Caller.");
+        info("Ready. Select Caller or Callee.");
+      });
+
+      function cacheElements() {
+        elements.roleCaller = document.getElementById("roleCaller");
+        elements.roleCallee = document.getElementById("roleCallee");
+        elements.waitIceComplete = document.getElementById("waitIceComplete");
+        elements.iceModePill = document.getElementById("iceModePill");
+        elements.instructions = document.getElementById("instructions");
+
+        elements.copyLocalDescBtn = document.getElementById("copyLocalDescBtn");
+        elements.localDesc = document.getElementById("localDesc");
+        elements.copyLocalCandidatesBtn = document.getElementById("copyLocalCandidatesBtn");
+        elements.localCandidates = document.getElementById("localCandidates");
+        elements.trickleDetails = document.getElementById("trickleDetails");
+
+        elements.applyRemoteDescBtn = document.getElementById("applyRemoteDescBtn");
+        elements.remoteDesc = document.getElementById("remoteDesc");
+        elements.addRemoteCandidatesBtn = document.getElementById("addRemoteCandidatesBtn");
+        elements.remoteCandidates = document.getElementById("remoteCandidates");
+        elements.trickleDetailsRemote = document.getElementById("trickleDetailsRemote");
+
+        elements.createOfferBtn = document.getElementById("createOfferBtn");
+        elements.createAnswerBtn = document.getElementById("createAnswerBtn");
+
+        elements.stateSignaling = document.getElementById("stateSignaling");
+        elements.stateIceGathering = document.getElementById("stateIceGathering");
+        elements.stateIceConnection = document.getElementById("stateIceConnection");
+        elements.stateConnection = document.getElementById("stateConnection");
+        elements.dotSignaling = document.getElementById("dotSignaling");
+        elements.dotGathering = document.getElementById("dotGathering");
+        elements.dotIce = document.getElementById("dotIce");
+        elements.dotConn = document.getElementById("dotConn");
+
+        elements.messages = document.getElementById("messages");
+        elements.messageInput = document.getElementById("messageInput");
+        elements.sendBtn = document.getElementById("sendBtn");
+        elements.disconnectBtn = document.getElementById("disconnectBtn");
+        elements.resetBtn = document.getElementById("resetBtn");
+
+        elements.log = document.getElementById("log");
+      }
+
+      function wireUI() {
+        elements.roleCaller.addEventListener("change", onRoleChange);
+        elements.roleCallee.addEventListener("change", onRoleChange);
+        elements.waitIceComplete.addEventListener("change", onIceModeChange);
+
+        elements.createOfferBtn.addEventListener("click", onCreateOffer);
+        elements.createAnswerBtn.addEventListener("click", onAcceptOfferCreateAnswer);
+        elements.applyRemoteDescBtn.addEventListener("click", onApplyRemoteDescription);
+
+        elements.copyLocalDescBtn.addEventListener("click", () => copyToClipboard(elements.localDesc.value, elements.copyLocalDescBtn));
+        elements.copyLocalCandidatesBtn.addEventListener("click", () => copyToClipboard(elements.localCandidates.value, elements.copyLocalCandidatesBtn));
+        elements.addRemoteCandidatesBtn.addEventListener("click", onAddRemoteCandidates);
+
+        elements.sendBtn.addEventListener("click", onSendMessage);
+        elements.messageInput.addEventListener("keydown", (e) => { if (e.key === "Enter") onSendMessage(); });
+        elements.disconnectBtn.addEventListener("click", disconnectEverything);
+        elements.resetBtn.addEventListener("click", () => window.location.reload());
+      }
+
+      function onRoleChange() {
+        if (pc) return; // role is locked after start
+        isCaller = elements.roleCaller.checked ? true : elements.roleCallee.checked ? false : null;
+        if (isCaller === null) {
+          writeInstructions("Choose a role to begin. Only one side should be Caller.");
+          disableAllSignaling();
+          return;
+        }
+        if (isCaller) {
+          writeInstructions("Caller: Click 'Create Offer', copy local description to Callee, then paste Callee's Answer and click Apply.");
+          elements.createOfferBtn.disabled = false;
+          elements.createAnswerBtn.disabled = true;
+        } else {
+          writeInstructions("Callee: Paste Caller Offer into Remote description and click 'Accept Offer & Create Answer'. Then copy your Local description (Answer) back to Caller.");
+          elements.createOfferBtn.disabled = true;
+          elements.createAnswerBtn.disabled = false;
+        }
+        elements.applyRemoteDescBtn.disabled = false;
+        elements.addRemoteCandidatesBtn.disabled = false;
+      }
+
+      function onIceModeChange() {
+        if (iceModeLocked) return;
+        iceWaitForComplete = !!elements.waitIceComplete.checked;
+        reflectTrickleVisibility();
+      }
+
+      function reflectTrickleVisibility() {
+        if (iceWaitForComplete) {
+          elements.iceModePill.textContent = "Mode: Non‑trickle (wait for ICE)";
+          elements.trickleDetails.style.opacity = 0.65;
+          elements.trickleDetailsRemote.style.opacity = 0.65;
+        } else {
+          elements.iceModePill.textContent = "Mode: Trickle ICE (advanced)";
+          elements.trickleDetails.style.opacity = 1;
+          elements.trickleDetailsRemote.style.opacity = 1;
+        }
+      }
+
+      function disableAllSignaling() {
+        elements.createOfferBtn.disabled = true;
+        elements.createAnswerBtn.disabled = true;
+        elements.applyRemoteDescBtn.disabled = true;
+        elements.copyLocalDescBtn.disabled = true;
+        elements.copyLocalCandidatesBtn.disabled = true;
+        elements.addRemoteCandidatesBtn.disabled = true;
+      }
+
+      async function onCreateOffer() {
+        try {
+          ensureRole(true);
+          lockModes();
+          ensurePeerConnection();
+          createDataChannelForCaller();
+          await pc.setLocalDescription(await pc.createOffer());
+          info("Created offer; set as local description.");
+          if (iceWaitForComplete) {
+            await waitForIceComplete(pc);
+            info("ICE gathering complete (caller). Local description ready to copy.");
+          }
+          renderLocalDescription();
+          elements.copyLocalDescBtn.disabled = false;
+        } catch (err) {
+          error("Failed to create offer: " + err.message);
+        }
+      }
+
+      async function onAcceptOfferCreateAnswer() {
+        try {
+          ensureRole(false);
+          lockModes();
+          ensurePeerConnection();
+          const offer = parseDescriptionFromTextarea(elements.remoteDesc);
+          await pc.setRemoteDescription(offer);
+          info("Applied remote Offer (callee).");
+          await pc.setLocalDescription(await pc.createAnswer());
+          info("Created Answer; set as local description (callee).");
+          if (iceWaitForComplete) {
+            await waitForIceComplete(pc);
+            info("ICE gathering complete (callee). Local description ready to copy.");
+          }
+          renderLocalDescription();
+          elements.copyLocalDescBtn.disabled = false;
+          await flushBufferedCandidates();
+        } catch (err) {
+          error("Failed to accept offer/create answer: " + err.message);
+        }
+      }
+
+      async function onApplyRemoteDescription() {
+        try {
+          if (!pc) ensurePeerConnection();
+          const desc = parseDescriptionFromTextarea(elements.remoteDesc);
+          await pc.setRemoteDescription(desc);
+          info("Applied remote description: " + desc.type);
+          await flushBufferedCandidates();
+        } catch (err) {
+          error("Failed to apply remote description: " + err.message);
+          outlineError(elements.remoteDesc);
+        }
+      }
+
+      async function onAddRemoteCandidates() {
+        if (!pc) { error("PeerConnection not ready. Apply remote description first."); return; }
+        const text = elements.remoteCandidates.value.trim();
+        if (!text) { info("No candidates to add."); return; }
+        try {
+          const candidates = parseCandidates(text);
+          info(`Adding ${candidates.length} remote candidate(s)...`);
+          for (const cand of candidates) {
+            await maybeAddOrBufferCandidate(cand);
+          }
+          info("Remote candidates processed.");
+        } catch (err) {
+          error("Failed to add candidates: " + err.message);
+          outlineError(elements.remoteCandidates);
+        }
+      }
+
+      function ensureRole(expectCaller) {
+        if (isCaller === null) throw new Error("Select a role first.");
+        if (typeof expectCaller === "boolean" && isCaller !== expectCaller) {
+          throw new Error(expectCaller ? "Role mismatch: you are not Caller." : "Role mismatch: you are not Callee.");
+        }
+      }
+
+      function lockModes() {
+        iceModeLocked = true;
+        elements.waitIceComplete.disabled = true;
+        elements.roleCaller.disabled = true;
+        elements.roleCallee.disabled = true;
+      }
+
+      function ensurePeerConnection() {
+        if (pc) return;
+        const configuration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+        pc = new RTCPeerConnection(configuration);
+        wirePeerConnection(pc);
+        if (!isCaller) {
+          pc.ondatachannel = (event) => {
+            const channel = event.channel;
+            wireDataChannel(channel);
+            chatChannel = channel;
+            info("DataChannel received (callee).");
+          };
+        }
+      }
+
+      function wirePeerConnection(conn) {
+        conn.onicecandidate = ({ candidate }) => {
+          if (!candidate) return; // end of candidates
+          if (!iceWaitForComplete) {
+            const json = JSON.stringify(candidate);
+            appendLocalCandidateLine(json);
+          }
+        };
+        conn.onicegatheringstatechange = () => {
+          updateStates();
+          if (conn.iceGatheringState === "complete" && !iceWaitForComplete) {
+            info("ICE gathering complete (trickle mode). Consider sending end-of-candidates implicitly.");
+          }
+        };
+        conn.oniceconnectionstatechange = () => {
+          updateStates();
+          if (conn.iceConnectionState === "failed") {
+            warn("ICE connection failed. On restrictive networks, TURN may be required.");
+          }
+        };
+        conn.onsignalingstatechange = updateStates;
+        conn.onconnectionstatechange = () => {
+          updateStates();
+          if (conn.connectionState === "connected") {
+            info("Peers connected.");
+          }
+          if (conn.connectionState === "disconnected" || conn.connectionState === "closed") {
+            warn("Peer disconnected or closed.");
+          }
+        };
+        updateStates();
+      }
+
+      function createDataChannelForCaller() {
+        const dc = pc.createDataChannel("chat");
+        wireDataChannel(dc);
+        chatChannel = dc;
+        info("Created DataChannel (caller).");
+      }
+
+      function wireDataChannel(dc) {
+        dc.onopen = () => {
+          setChatEnabled(true);
+          sysMsg("Channel open");
+        };
+        dc.onclose = () => {
+          setChatEnabled(false);
+          sysMsg("Channel closed");
+        };
+        dc.onmessage = (e) => {
+          appendMsg("peer", e.data);
+        };
+        dc.onerror = (e) => warn("DataChannel error: " + (e?.message || e));
+      }
+
+      async function waitForIceComplete(conn) {
+        if (conn.iceGatheringState === "complete") return;
+        await new Promise((resolve) => {
+          const check = () => {
+            if (conn.iceGatheringState === "complete") {
+              conn.removeEventListener("icegatheringstatechange", check);
+              resolve();
+            }
+          };
+          conn.addEventListener("icegatheringstatechange", check);
+        });
+      }
+
+      function renderLocalDescription() {
+        if (!pc?.localDescription) return;
+        elements.localDesc.value = JSON.stringify(pc.localDescription);
+        outlineSuccess(elements.localDesc);
+      }
+
+      function appendLocalCandidateLine(json) {
+        const wasEmpty = elements.localCandidates.value.trim().length === 0;
+        elements.localCandidates.value += (wasEmpty ? "" : "\n") + json;
+        elements.copyLocalCandidatesBtn.disabled = elements.localCandidates.value.trim().length === 0;
+      }
+
+      function parseDescriptionFromTextarea(textarea) {
+        const raw = textarea.value.trim();
+        if (!raw) throw new Error("Remote description textarea is empty.");
+        try {
+          const obj = JSON.parse(raw);
+          if (!obj || !obj.type || !obj.sdp) throw new Error("Invalid description object.");
+          outlineSuccess(textarea);
+          return obj;
+        } catch (e) {
+          throw new Error("Remote description must be valid JSON with {type, sdp}.");
+        }
+      }
+
+      function parseCandidates(text) {
+        const trimmed = text.trim();
+        if (!trimmed) return [];
+        if (trimmed.startsWith("[")) {
+          const arr = JSON.parse(trimmed);
+          if (!Array.isArray(arr)) throw new Error("Expected JSON array of candidates.");
+          return arr;
+        }
+        const lines = trimmed.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+        const out = [];
+        for (const line of lines) {
+          try {
+            const cand = JSON.parse(line);
+            if (cand && (cand.candidate || cand.candidate === "")) {
+              out.push(cand);
+            } else {
+              warn("Skipping line without candidate field.");
+            }
+          } catch (e) {
+            warn("Skipping non-JSON line: " + line.slice(0, 40) + (line.length > 40 ? "…" : ""));
+          }
+        }
+        return out;
+      }
+
+      async function maybeAddOrBufferCandidate(candidate) {
+        if (!pc?.remoteDescription) {
+          pendingRemoteCandidates.push(candidate);
+          return;
+        }
+        try {
+          await pc.addIceCandidate(candidate);
+        } catch (e) {
+          // If glare/ordering happens, keep buffered; otherwise log.
+          warn("addIceCandidate error: " + e.message);
+        }
+      }
+
+      async function flushBufferedCandidates() {
+        if (!pendingRemoteCandidates.length) return;
+        const list = pendingRemoteCandidates.splice(0);
+        for (const c of list) {
+          try { await pc.addIceCandidate(c); } catch (e) { warn("Buffered addIceCandidate failed: " + e.message); }
+        }
+      }
+
+      function setChatEnabled(enabled) {
+        elements.messageInput.disabled = !enabled;
+        elements.sendBtn.disabled = !enabled;
+        elements.disconnectBtn.disabled = !enabled;
+        if (enabled) elements.messageInput.focus();
+      }
+
+      function appendMsg(kind, text) {
+        const div = document.createElement("div");
+        div.className = "msg " + kind;
+        div.textContent = (kind === "me" ? "You: " : kind === "peer" ? "Peer: " : "") + text;
+        elements.messages.appendChild(div);
+        elements.messages.scrollTop = elements.messages.scrollHeight;
+      }
+
+      function sysMsg(text) {
+        const div = document.createElement("div");
+        div.className = "msg sys";
+        div.textContent = text;
+        elements.messages.appendChild(div);
+        elements.messages.scrollTop = elements.messages.scrollHeight;
+      }
+
+      function onSendMessage() {
+        const text = elements.messageInput.value;
+        if (!text) return;
+        if (!chatChannel || chatChannel.readyState !== "open") { warn("Channel not open"); return; }
+        const limit = 2048;
+        const payload = text.length > limit ? text.slice(0, limit) : text;
+        if (text.length > limit) warn("Message truncated to 2KB");
+        chatChannel.send(payload);
+        appendMsg("me", payload);
+        elements.messageInput.value = "";
+      }
+
+      function updateStates() {
+        if (!pc) {
+          elements.stateSignaling.textContent = "-";
+          elements.stateIceGathering.textContent = "-";
+          elements.stateIceConnection.textContent = "-";
+          elements.stateConnection.textContent = "-";
+          setDot(elements.dotSignaling);
+          setDot(elements.dotGathering);
+          setDot(elements.dotIce);
+          setDot(elements.dotConn);
+          return;
+        }
+        elements.stateSignaling.textContent = pc.signalingState;
+        elements.stateIceGathering.textContent = pc.iceGatheringState;
+        elements.stateIceConnection.textContent = pc.iceConnectionState;
+        elements.stateConnection.textContent = pc.connectionState;
+        setDot(elements.dotSignaling, pc.signalingState === "stable" ? "ok" : "warn");
+        setDot(elements.dotGathering, pc.iceGatheringState === "complete" ? "ok" : pc.iceGatheringState === "gathering" ? "warn" : undefined);
+        const iceState = pc.iceConnectionState;
+        setDot(elements.dotIce, iceState === "connected" || iceState === "completed" ? "ok" : iceState === "failed" ? "bad" : iceState === "checking" ? "warn" : undefined);
+        const connState = pc.connectionState;
+        setDot(elements.dotConn, connState === "connected" ? "ok" : connState === "failed" ? "bad" : connState === "connecting" ? "warn" : undefined);
+      }
+
+      function setDot(el, status) {
+        el.classList.remove("ok", "warn", "bad");
+        if (status) el.classList.add(status);
+      }
+
+      function outlineError(el) {
+        el.classList.remove("success-outline");
+        el.classList.add("error-outline");
+        setTimeout(() => el.classList.remove("error-outline"), 1200);
+      }
+
+      function outlineSuccess(el) {
+        el.classList.remove("error-outline");
+        el.classList.add("success-outline");
+        setTimeout(() => el.classList.remove("success-outline"), 1200);
+      }
+
+      function writeInstructions(text) {
+        elements.instructions.textContent = text;
+      }
+
+      function info(msg) { log(msg); }
+      function warn(msg) { log("WARN: " + msg); }
+      function error(msg) { log("ERROR: " + msg); }
+      function log(msg) {
+        const line = document.createElement("div");
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        elements.log.appendChild(line);
+        elements.log.scrollTop = elements.log.scrollHeight;
+        console.log(msg);
+      }
+
+      async function copyToClipboard(text, btn) {
+        try {
+          if (!text) return;
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+          }
+          btn && outlineSuccess(btn);
+          info("Copied to clipboard.");
+        } catch (e) {
+          warn("Clipboard API not available. Select and copy manually.");
+        }
+      }
+
+      async function disconnectEverything() {
+        try {
+          if (chatChannel) { try { chatChannel.close(); } catch (_) {} }
+          if (pc) { try { pc.close(); } catch (_) {} }
+        } finally {
+          chatChannel = null;
+          pc = null;
+          pendingRemoteCandidates = [];
+          elements.localDesc.value = "";
+          elements.remoteDesc.value = "";
+          elements.localCandidates.value = "";
+          elements.remoteCandidates.value = "";
+          elements.copyLocalDescBtn.disabled = true;
+          elements.copyLocalCandidatesBtn.disabled = true;
+          setChatEnabled(false);
+          sysMsg("Disconnected");
+          updateStates();
+        }
+      }
+    </script>
+  </body>
+  </html>
