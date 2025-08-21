@@ -179,22 +179,20 @@ const dataChannelState = document.getElementById('dataChannelState');
 // WebRTC Globals
 let pc;
 let dataChannel;
-let isPolite; // Determined by radio buttons
+let isPolite;
 
 // Perfect Negotiation Globals
 let makingOffer = false;
 let ignoreOffer = false;
 
 const config = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }], // A public STUN server
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
 };
 
 // --- Main Setup ---
 createPeerConnectionBtn.onclick = createPeerConnection;
 createOfferBtn.onclick = async () => {
-    // The "impolite" peer is responsible for creating the initial data channel and offer
     try {
-        // Create the data channel. This will trigger onnegotiationneeded.
         dataChannel = pc.createDataChannel("chat");
         setupDataChannelEvents(dataChannel);
     } catch (err) {
@@ -207,34 +205,41 @@ acceptSdpBtn.onclick = handleRemoteSdp;
 
 function createPeerConnection() {
     if (pc) {
-        console.log("Closing existing PeerConnection");
         pc.close();
     }
-
     pc = new RTCPeerConnection(config);
     console.log("RTCPeerConnection created.");
 
-    // Update UI with connection states
     pc.onconnectionstatechange = () => pcState.textContent = pc.connectionState;
     pc.onicegatheringstatechange = () => iceGatheringState.textContent = pc.iceGatheringState;
     pc.oniceconnectionstatechange = () => iceConnectionState.textContent = pc.iceConnectionState;
 
-    // This is the core of perfect negotiation logic.
     pc.onnegotiationneeded = handleNegotiationNeeded;
-
-    // The "callee" side will receive the data channel.
     pc.ondatachannel = (event) => {
         dataChannel = event.channel;
         console.log("Received data channel:", dataChannel.label);
         setupDataChannelEvents(dataChannel);
     };
+    
+    // **FIX START: Add a dummy track to stabilize ICE for data-only connections**
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const dst = oscillator.connect(audioContext.createMediaStreamDestination());
+    oscillator.start();
+    const [track] = dst.stream.getAudioTracks();
+    pc.addTrack(track, dst.stream);
+    
+    // The remote peer must handle this incoming track
+    pc.ontrack = (event) => {
+      console.log("Received remote dummy track.");
+      // We don't need to do anything with it, just acknowledge it.
+    };
+    // **FIX END**
 
-    // NON-TRICKLE ICE: Wait for ICE gathering to complete.
     pc.iceGatheringComplete = new Promise(resolve => {
         pc.onicecandidate = (e) => !e.candidate && resolve();
     });
     
-    // Update UI
     isPolite = document.querySelector('input[name="role"]:checked').value === 'polite';
     document.querySelectorAll('input[name="role"]').forEach(radio => radio.disabled = true);
     createPeerConnectionBtn.disabled = true;
@@ -249,10 +254,7 @@ async function handleNegotiationNeeded() {
         await pc.setLocalDescription();
         await pc.iceGatheringComplete;
         console.log("ICE Gathering Complete. Offer is ready.");
-        
-        // **FIX:** Serialize the entire description object to JSON.
         localSdpTextarea.value = JSON.stringify(pc.localDescription);
-
     } catch (err) {
         console.error("Error in handleNegotiationNeeded:", err);
     } finally {
@@ -262,22 +264,17 @@ async function handleNegotiationNeeded() {
 
 async function handleRemoteSdp() {
     const remoteSdpJson = remoteSdpTextarea.value;
-    if (!remoteSdpJson) {
-        return alert("Remote Session Description is empty!");
-    }
+    if (!remoteSdpJson) return alert("Remote Session Description is empty!");
     
     let description;
     try {
-        // **FIX:** Parse the JSON back into a description object.
         description = JSON.parse(remoteSdpJson);
     } catch (e) {
         return alert("Invalid JSON in Remote Session Description.");
     }
     
-    // Perfect negotiation collision handling
     const offerCollision = description.type === "offer" && (makingOffer || pc.signalingState !== "stable");
     ignoreOffer = !isPolite && offerCollision;
-
     if (ignoreOffer) {
         console.log("Ignoring colliding offer as the impolite peer.");
         return;
@@ -292,8 +289,6 @@ async function handleRemoteSdp() {
             await pc.setLocalDescription();
             await pc.iceGatheringComplete;
             console.log("ICE Gathering Complete. Answer is ready.");
-            
-            // **FIX:** Serialize the entire description object to JSON.
             localSdpTextarea.value = JSON.stringify(pc.localDescription);
         }
     } catch (err) {
