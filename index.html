@@ -40,6 +40,9 @@
             font-family: monospace;
             font-size: 12px;
             margin-bottom: 10px;
+            white-space: pre;
+            word-wrap: normal;
+            overflow-x: scroll;
         }
         button {
             background-color: #3f51b5;
@@ -128,14 +131,14 @@
     </div>
 
     <div class="step">
-        <h2>2. Create & Exchange SDP</h2>
+        <h2>2. Create & Exchange Session Description</h2>
         <button id="createOfferBtn" disabled>Create Offer</button>
-        <p><strong>Your Local SDP (Offer/Answer):</strong><br>Copy this and paste it into the remote peer's "Remote SDP" box.</p>
-        <textarea id="localSdpTextarea" readonly placeholder="Your SDP will appear here..."></textarea>
+        <p><strong>Your Local Session Description (JSON):</strong><br>Copy this and paste it into the remote peer's "Remote" box.</p>
+        <textarea id="localSdpTextarea" readonly placeholder="Your Session Description (JSON) will appear here..."></textarea>
 
-        <p><strong>Remote SDP (Offer/Answer):</strong><br>Paste the SDP from the other peer here.</p>
-        <textarea id="remoteSdpTextarea" placeholder="Paste remote SDP here..."></textarea>
-        <button id="acceptSdpBtn" disabled>Accept Remote SDP</button>
+        <p><strong>Remote Session Description (JSON):</strong><br>Paste the JSON from the other peer here.</p>
+        <textarea id="remoteSdpTextarea" placeholder="Paste remote Session Description (JSON) here..."></textarea>
+        <button id="acceptSdpBtn" disabled>Accept Remote Description</button>
     </div>
 
     <div class="step">
@@ -216,29 +219,19 @@ function createPeerConnection() {
     pc.onicegatheringstatechange = () => iceGatheringState.textContent = pc.iceGatheringState;
     pc.oniceconnectionstatechange = () => iceConnectionState.textContent = pc.iceConnectionState;
 
-    // This is the core of perfect negotiation logic. It's triggered when
-    // tracks or data channels are added, requiring a new offer.
+    // This is the core of perfect negotiation logic.
     pc.onnegotiationneeded = handleNegotiationNeeded;
 
-    // The "callee" side will receive the data channel from the "caller"
+    // The "callee" side will receive the data channel.
     pc.ondatachannel = (event) => {
         dataChannel = event.channel;
         console.log("Received data channel:", dataChannel.label);
         setupDataChannelEvents(dataChannel);
     };
 
-    // --- NON-TRICKLE ICE ---
-    // With non-trickle ICE, we don't use the onicecandidate event to send
-    // candidates one by one. Instead, we wait for the ICE gathering to
-    // complete. When pc.iceGatheringState becomes 'complete', the
-    // pc.localDescription will contain an SDP with *all* the candidates.
-    // We create a promise that resolves when gathering is complete.
+    // NON-TRICKLE ICE: Wait for ICE gathering to complete.
     pc.iceGatheringComplete = new Promise(resolve => {
-        pc.onicecandidate = (e) => {
-            if (e.candidate === null) {
-                resolve();
-            }
-        };
+        pc.onicecandidate = (e) => !e.candidate && resolve();
     });
     
     // Update UI
@@ -249,22 +242,16 @@ function createPeerConnection() {
     acceptSdpBtn.disabled = false;
 }
 
-/**
- * Implements the perfect negotiation logic when an offer needs to be sent.
- */
 async function handleNegotiationNeeded() {
     console.log("`negotiationneeded` event fired");
     try {
         makingOffer = true;
-        // setLocalDescription will generate an offer and start ICE gathering.
         await pc.setLocalDescription();
-
-        // Wait for ICE gathering to complete.
         await pc.iceGatheringComplete;
-        console.log("ICE Gathering Complete. Final SDP is ready.");
+        console.log("ICE Gathering Complete. Offer is ready.");
         
-        // The localDescription now has the complete SDP with all candidates.
-        localSdpTextarea.value = pc.localDescription.sdp;
+        // **FIX:** Serialize the entire description object to JSON.
+        localSdpTextarea.value = JSON.stringify(pc.localDescription);
 
     } catch (err) {
         console.error("Error in handleNegotiationNeeded:", err);
@@ -273,17 +260,19 @@ async function handleNegotiationNeeded() {
     }
 }
 
-/**
- * Handles incoming SDP from the remote peer, implementing the
- * other half of the perfect negotiation logic.
- */
 async function handleRemoteSdp() {
-    const remoteSdp = remoteSdpTextarea.value;
-    if (!remoteSdp) {
-        return alert("Remote SDP is empty!");
+    const remoteSdpJson = remoteSdpTextarea.value;
+    if (!remoteSdpJson) {
+        return alert("Remote Session Description is empty!");
     }
-
-    const description = { type: remoteSdp.includes("a=setup:actpass") ? "offer" : "answer", sdp: remoteSdp };
+    
+    let description;
+    try {
+        // **FIX:** Parse the JSON back into a description object.
+        description = JSON.parse(remoteSdpJson);
+    } catch (e) {
+        return alert("Invalid JSON in Remote Session Description.");
+    }
     
     // Perfect negotiation collision handling
     const offerCollision = description.type === "offer" && (makingOffer || pc.signalingState !== "stable");
@@ -300,22 +289,18 @@ async function handleRemoteSdp() {
 
         if (description.type === "offer") {
             console.log("Received an offer, creating an answer.");
-            await pc.setLocalDescription(); // This creates the answer
-
-            // Wait for ICE gathering to complete before displaying the answer.
+            await pc.setLocalDescription();
             await pc.iceGatheringComplete;
-            console.log("ICE Gathering Complete. Answer SDP is ready.");
+            console.log("ICE Gathering Complete. Answer is ready.");
             
-            localSdpTextarea.value = pc.localDescription.sdp;
+            // **FIX:** Serialize the entire description object to JSON.
+            localSdpTextarea.value = JSON.stringify(pc.localDescription);
         }
     } catch (err) {
         console.error("Error handling remote SDP:", err);
     }
 }
 
-/**
- * Sets up event listeners for the RTCDataChannel.
- */
 function setupDataChannelEvents(channel) {
     channel.onopen = () => {
         console.log("Data channel is open!");
@@ -337,7 +322,6 @@ function setupDataChannelEvents(channel) {
         appendMessage(event.data, 'received');
     };
 
-    // Link send button to the data channel
     sendBtn.onclick = () => {
         const message = messageInput.value;
         if (message) {
@@ -354,12 +338,10 @@ function setupDataChannelEvents(channel) {
     };
 }
 
-// --- UI Helper Functions ---
-
 function appendMessage(message, type) {
     const messageEl = document.createElement('div');
     messageEl.textContent = message;
-    messageEl.className = type; // 'sent' or 'received'
+    messageEl.className = type;
     chatBox.appendChild(messageEl);
     chatBox.scrollTop = chatBox.scrollHeight;
 }
